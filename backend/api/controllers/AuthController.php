@@ -20,8 +20,8 @@ class AuthController {
 
     // Constantes de configuración de bloqueo
     const LOCKOUT_WINDOW = 120;        // 2 minutos en segundos (ventana para acumular intentos)
-    const FIRST_LOCKOUT_MINUTES = 5;   // Primer bloqueo: 5 minutos
-    const SECOND_LOCKOUT_MINUTES = 10; // Segundo bloqueo: 10 minutos
+    const FIRST_LOCKOUT_MINUTES = 1;   // Primer bloqueo: 5 minutos
+    const SECOND_LOCKOUT_MINUTES = 2; // Segundo bloqueo: 10 minutos
     const ATTEMPTS_PER_LEVEL = 3;      // Intentos antes de cada nivel de bloqueo
 
     public function __construct($app) {
@@ -125,14 +125,19 @@ class AuthController {
                 // Usar el username desencriptado
                 $usernameDisplay = $user['username_plain'] ?? $username;
 
+                // Generar JWT con username desencriptado
+                $jwtToken = $this->generateJWTWithUsername($user, $usernameDisplay);
+
+                // Registrar la sesión en la base de datos
+                $expiresAt = date('Y-m-d H:i:s', time() + 3600); // 1 hora
+                $sessionId = $this->repository->crearSesion($user['id'], $jwtToken, $expiresAt);
+
                 // Log de login exitoso
                 Logger::loginAttempt($usernameDisplay, true, null, [
                     'role' => $user['role'],
-                    'user_id' => $user['id']
+                    'user_id' => $user['id'],
+                    'session_id' => $sessionId
                 ]);
-
-                // Generar JWT con username desencriptado
-                $jwtToken = $this->generateJWTWithUsername($user, $usernameDisplay);
 
                 // Mensaje personalizado según el rol
                 $welcomeMessage = $this->getWelcomeMessage($user['role'], $usernameDisplay);
@@ -303,6 +308,80 @@ class AuthController {
 
         } catch (Exception $e) {
             return $this->response(3, ["Error al verificar sesión."]);
+        }
+    }
+
+    /**
+     * Cerrar sesión (logout)
+     * Invalida el token actual en la base de datos
+     */
+    public function logout() {
+        try {
+            $userData = $this->getAuthenticatedUser();
+            
+            // Obtener el token del header
+            $authHeader = $this->app->request()->headers('Authorization');
+            if (!$authHeader) {
+                $authHeader = isset($_SERVER['HTTP_AUTHORIZATION']) ? $_SERVER['HTTP_AUTHORIZATION'] : null;
+            }
+            
+            if ($authHeader && strpos($authHeader, 'Bearer ') === 0) {
+                $token = substr($authHeader, 7);
+                
+                // Invalidar la sesión en la base de datos
+                $invalidated = $this->repository->invalidarSesion($token);
+                
+                if ($invalidated) {
+                    Logger::info('Logout exitoso', [
+                        'username' => $userData ? $userData['username'] : 'unknown',
+                        'user_id' => $userData ? $userData['id'] : 'unknown',
+                        'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+                    ]);
+                    
+                    return $this->response(1, ["Sesión cerrada correctamente."]);
+                }
+            }
+            
+            // Aunque no se encontró la sesión, respondemos exitosamente
+            // (el usuario ya no tiene acceso de todos modos)
+            return $this->response(1, ["Sesión cerrada."]);
+
+        } catch (Exception $e) {
+            Logger::error('Error en logout', [
+                'error' => $e->getMessage(),
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            ]);
+            return $this->response(3, ["Error al cerrar sesión."]);
+        }
+    }
+
+    /**
+     * Cerrar todas las sesiones del usuario (logout de todos los dispositivos)
+     */
+    public function logoutAll() {
+        try {
+            $userData = $this->getAuthenticatedUser();
+            if (!$userData) {
+                return $this->response(3, ["Sesión no válida."]);
+            }
+
+            $count = $this->repository->invalidarTodasLasSesiones($userData['id']);
+            
+            Logger::info('Logout de todas las sesiones', [
+                'username' => $userData['username'],
+                'user_id' => $userData['id'],
+                'sessions_closed' => $count,
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            ]);
+
+            return $this->response(1, ["Se cerraron {$count} sesión(es) activa(s)."]);
+
+        } catch (Exception $e) {
+            Logger::error('Error en logout all', [
+                'error' => $e->getMessage(),
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            ]);
+            return $this->response(3, ["Error al cerrar sesiones."]);
         }
     }
 

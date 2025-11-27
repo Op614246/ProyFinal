@@ -202,4 +202,132 @@ class AuthRepository {
         
         return $users;
     }
+
+    // ========================================
+    // MÉTODOS PARA GESTIÓN DE SESIONES
+    // ========================================
+
+    /**
+     * Registra una nueva sesión de usuario
+     * 
+     * @param int $userId ID del usuario
+     * @param string $token Token JWT generado
+     * @param string $expiresAt Fecha de expiración del token
+     * @return int|false ID de la sesión creada o false si falla
+     */
+    public function crearSesion($userId, $token, $expiresAt) {
+        // Guardar solo el hash del token por seguridad
+        $tokenHash = hash('sha256', $token);
+        $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+        $userAgent = isset($_SERVER['HTTP_USER_AGENT']) ? substr($_SERVER['HTTP_USER_AGENT'], 0, 255) : null;
+        
+        $sql = "INSERT INTO user_sessions (user_id, token_hash, ip_address, user_agent, expires_at) 
+                VALUES (:user_id, :token_hash, :ip, :user_agent, :expires_at)";
+        
+        $stmt = $this->db->prepare($sql);
+        $result = $stmt->execute([
+            ':user_id' => $userId,
+            ':token_hash' => $tokenHash,
+            ':ip' => $ip,
+            ':user_agent' => $userAgent,
+            ':expires_at' => $expiresAt
+        ]);
+        
+        return $result ? $this->db->lastInsertId() : false;
+    }
+
+    /**
+     * Invalida una sesión (logout)
+     * 
+     * @param string $token Token JWT
+     * @return bool True si se invalidó correctamente
+     */
+    public function invalidarSesion($token) {
+        $tokenHash = hash('sha256', $token);
+        
+        $sql = "UPDATE user_sessions 
+                SET is_active = 0, logged_out_at = NOW() 
+                WHERE token_hash = :token_hash AND is_active = 1";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':token_hash' => $tokenHash]);
+        
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * Invalida todas las sesiones de un usuario (logout de todos los dispositivos)
+     * 
+     * @param int $userId ID del usuario
+     * @return int Número de sesiones invalidadas
+     */
+    public function invalidarTodasLasSesiones($userId) {
+        $sql = "UPDATE user_sessions 
+                SET is_active = 0, logged_out_at = NOW() 
+                WHERE user_id = :user_id AND is_active = 1";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':user_id' => $userId]);
+        
+        return $stmt->rowCount();
+    }
+
+    /**
+     * Verifica si una sesión está activa
+     * 
+     * @param string $token Token JWT
+     * @return bool True si la sesión está activa y no ha expirado
+     */
+    public function sesionActiva($token) {
+        $tokenHash = hash('sha256', $token);
+        
+        $sql = "SELECT COUNT(*) FROM user_sessions 
+                WHERE token_hash = :token_hash 
+                AND is_active = 1 
+                AND expires_at > NOW()";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':token_hash' => $tokenHash]);
+        
+        return $stmt->fetchColumn() > 0;
+    }
+
+    /**
+     * Obtiene el historial de sesiones de un usuario
+     * 
+     * @param int $userId ID del usuario
+     * @param int $limit Número máximo de registros
+     * @return array Lista de sesiones
+     */
+    public function obtenerHistorialSesiones($userId, $limit = 10) {
+        $sql = "SELECT id, ip_address, user_agent, created_at, expires_at, 
+                       logged_out_at, is_active 
+                FROM user_sessions 
+                WHERE user_id = :user_id 
+                ORDER BY created_at DESC 
+                LIMIT :limit";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->bindValue(':user_id', $userId, PDO::PARAM_INT);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Limpia sesiones expiradas (para mantenimiento)
+     * 
+     * @return int Número de sesiones limpiadas
+     */
+    public function limpiarSesionesExpiradas() {
+        $sql = "UPDATE user_sessions 
+                SET is_active = 0 
+                WHERE is_active = 1 AND expires_at < NOW()";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute();
+        
+        return $stmt->rowCount();
+    }
 }

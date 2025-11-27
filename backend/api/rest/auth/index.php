@@ -86,6 +86,34 @@ $app->get('/status', function () use ($app) {
 });
 
 /**
+ * POST /logout
+ * 
+ * Cierra la sesión actual (invalida el token).
+ * 
+ * Headers requeridos:
+ *   X-API-Key: <api_key>
+ *   Authorization: Bearer <jwt_token>
+ */
+$app->post('/logout', function () use ($app) {
+    $authController = new AuthController($app);
+    $authController->logout();
+});
+
+/**
+ * POST /logout-all
+ * 
+ * Cierra todas las sesiones del usuario.
+ * 
+ * Headers requeridos:
+ *   X-API-Key: <api_key>
+ *   Authorization: Bearer <jwt_token>
+ */
+$app->post('/logout-all', function () use ($app) {
+    $authController = new AuthController($app);
+    $authController->logoutAll();
+});
+
+/**
  * POST /register
  * 
  * Registra un nuevo usuario (SOLO ADMIN).

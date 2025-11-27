@@ -103,11 +103,43 @@ export class AuthService {
   }
 
   /**
-   * Cierra la sesión
+   * Cierra la sesión actual
+   * Llama al backend para invalidar el token y limpia el almacenamiento local
    */
   logout(): void {
-    this.tokenService.clear();
-    this.router.navigate(['/login']);
+    // Llamar al backend para invalidar la sesión
+    this.http.post<ApiResponse>(`${this.apiUrl}/logout`, {}).subscribe({
+      next: () => {
+        this.tokenService.clear();
+        this.router.navigate(['/login']);
+      },
+      error: () => {
+        // Aunque falle el backend, limpiamos localmente
+        this.tokenService.clear();
+        this.router.navigate(['/login']);
+      }
+    });
+  }
+
+  /**
+   * Cierra todas las sesiones del usuario
+   */
+  logoutAll(): Observable<ApiResponse> {
+    return this.http.post<ApiResponse>(`${this.apiUrl}/logout-all`, {}).pipe(
+      switchMap(response => {
+        this.tokenService.clear();
+        this.router.navigate(['/login']);
+        return new Observable<ApiResponse>(subscriber => {
+          subscriber.next(response);
+          subscriber.complete();
+        });
+      }),
+      catchError(error => {
+        this.tokenService.clear();
+        this.router.navigate(['/login']);
+        return this.handleError(error);
+      })
+    );
   }
 
   /**
