@@ -386,6 +386,130 @@ class AuthController {
     }
 
     /**
+     * Obtiene todos los usuarios (solo para admins)
+     */
+    public function getAllUsers() {
+        try {
+            $userData = $this->getAuthenticatedUser();
+            
+            if (!$userData || $userData['role'] !== 'admin') {
+                return $this->response(3, ["No tiene permisos para realizar esta acción."]);
+            }
+
+            $users = $this->repository->obtenerTodosLosUsuarios();
+            
+            // Formatear respuesta para el frontend
+            $formattedUsers = array_map(function($user) {
+                return [
+                    'id' => (int)$user['id'],
+                    'username' => $user['username'],
+                    'role' => $user['role'],
+                    'failedAttempts' => (int)$user['failed_attempts'],
+                    'lastAttemptTime' => $user['last_attempt_time'],
+                    'lockoutUntil' => $user['lockout_until'],
+                    'isPermanentlyLocked' => (bool)$user['is_permanently_locked'],
+                    'isActive' => !$user['is_permanently_locked'] // Activo si no está bloqueado permanentemente
+                ];
+            }, $users);
+
+            return $this->response(1, ["Lista de usuarios obtenida."], $formattedUsers);
+
+        } catch (Exception $e) {
+            Logger::error('Error al obtener usuarios', [
+                'error' => $e->getMessage(),
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            ]);
+            return $this->response(3, ["Error al obtener la lista de usuarios."]);
+        }
+    }
+
+    /**
+     * Activa o desactiva permanentemente un usuario (solo para admins)
+     */
+    public function toggleUserStatus($userId) {
+        try {
+            $userData = $this->getAuthenticatedUser();
+            
+            if (!$userData || $userData['role'] !== 'admin') {
+                return $this->response(3, ["No tiene permisos para realizar esta acción."]);
+            }
+
+            // No permitir que el admin se desactive a sí mismo
+            if ($userData['id'] == $userId) {
+                return $this->response(3, ["No puede desactivar su propia cuenta."]);
+            }
+
+            $result = $this->repository->toggleEstadoUsuario($userId);
+            
+            if ($result === null) {
+                return $this->response(3, ["Usuario no encontrado."]);
+            }
+
+            $estado = $result ? 'desactivado' : 'activado';
+            $accion = $result ? 'desactivar' : 'activar';
+            
+            Logger::info("Usuario {$estado}", [
+                'user_id' => $userId,
+                'action' => $accion,
+                'by_admin' => $userData['username'],
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            ]);
+
+            return $this->response(1, ["Usuario {$estado} exitosamente."], [
+                'isPermanentlyLocked' => $result
+            ]);
+
+        } catch (Exception $e) {
+            Logger::error('Error al cambiar estado de usuario', [
+                'error' => $e->getMessage(),
+                'user_id' => $userId,
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            ]);
+            return $this->response(3, ["Error al cambiar el estado del usuario."]);
+        }
+    }
+
+    /**
+     * Elimina un usuario (solo para admins)
+     */
+    public function deleteUser($userId) {
+        try {
+            $userData = $this->getAuthenticatedUser();
+            
+            if (!$userData || $userData['role'] !== 'admin') {
+                return $this->response(3, ["No tiene permisos para realizar esta acción."]);
+            }
+
+            // No permitir que el admin se elimine a sí mismo
+            if ($userData['id'] == $userId) {
+                return $this->response(3, ["No puede eliminar su propia cuenta."]);
+            }
+
+            $result = $this->repository->eliminarUsuario($userId);
+            
+            if (!$result) {
+                return $this->response(3, ["Usuario no encontrado o no se pudo eliminar."]);
+            }
+
+            Logger::info("Usuario eliminado", [
+                'user_id' => $userId,
+                'by_admin' => $userData['username'],
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            ]);
+
+            return $this->response(1, ["Usuario eliminado exitosamente."]);
+
+        } catch (Exception $e) {
+            Logger::error('Error al eliminar usuario', [
+                'error' => $e->getMessage(),
+                'user_id' => $userId,
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            ]);
+            return $this->response(3, ["Error al eliminar el usuario."]);
+        }
+    }
+
+    /**
      * Obtiene el usuario autenticado desde el middleware JWT
      * 
      * @return array|null Datos del usuario o null si no está autenticado

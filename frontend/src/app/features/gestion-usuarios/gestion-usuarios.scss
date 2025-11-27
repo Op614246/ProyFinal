@@ -1,0 +1,47 @@
+// Estilos para la gestión de usuarios
+:host {
+  display: block;
+}
+
+// Tabla de usuarios
+::ng-deep .p-datatable {
+  .p-datatable-header {
+    background: transparent;
+    border: none;
+  }
+  
+  .p-datatable-thead > tr > th {
+    background: #f8fafc;
+    color: #475569;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  
+  .p-datatable-tbody > tr {
+    &:hover {
+      background: #f1f5f9;
+    }
+    
+    > td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+  }
+}
+
+// Tags de estado
+::ng-deep .p-tag {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+// Botones de acción
+::ng-deep .p-button-sm {
+  padding: 0.5rem;
+  
+  fa-icon {
+    font-size: 0.875rem;
+  }
+}

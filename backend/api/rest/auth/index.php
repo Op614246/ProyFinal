@@ -141,5 +141,51 @@ $app->post('/unlock', function () use ($app) {
     $authController->unlockAccount();
 });
 
+// ============================================
+// RUTAS DE GESTIÓN DE USUARIOS (SOLO ADMIN)
+// ============================================
+
+/**
+ * GET /users
+ * 
+ * Obtiene la lista de todos los usuarios (SOLO ADMIN).
+ * 
+ * Headers requeridos:
+ *   X-API-Key: <api_key>
+ *   Authorization: Bearer <jwt_token>
+ */
+$app->get('/users', function () use ($app) {
+    $authController = new AuthController($app);
+    $authController->getAllUsers();
+});
+
+/**
+ * PUT /users/:id/toggle-status
+ * 
+ * Activa o desactiva permanentemente un usuario (SOLO ADMIN).
+ * 
+ * Headers requeridos:
+ *   X-API-Key: <api_key>
+ *   Authorization: Bearer <jwt_token>
+ */
+$app->put('/users/:id/toggle-status', function ($id) use ($app) {
+    $authController = new AuthController($app);
+    $authController->toggleUserStatus($id);
+});
+
+/**
+ * DELETE /users/:id
+ * 
+ * Elimina un usuario (SOLO ADMIN).
+ * 
+ * Headers requeridos:
+ *   X-API-Key: <api_key>
+ *   Authorization: Bearer <jwt_token>
+ */
+$app->delete('/users/:id', function ($id) use ($app) {
+    $authController = new AuthController($app);
+    $authController->deleteUser($id);
+});
+
 // Ejecutar la aplicación
 $app->run();

@@ -203,6 +203,87 @@ class AuthRepository {
         return $users;
     }
 
+    /**
+     * Cambia el estado de bloqueo permanente de un usuario (toggle).
+     * 
+     * @param int $userId ID del usuario
+     * @return bool|null Nuevo estado (true=bloqueado, false=activo) o null si no existe
+     */
+    public function toggleEstadoUsuario($userId) {
+        // Primero verificar si existe y obtener estado actual
+        $sql = "SELECT is_permanently_locked FROM users WHERE id = :id";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id' => $userId]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$user) {
+            return null;
+        }
+        
+        // Toggle del estado
+        $nuevoEstado = $user['is_permanently_locked'] ? 0 : 1;
+        
+        // Si se activa (desbloquea), también limpiamos los intentos fallidos
+        if ($nuevoEstado === 0) {
+            $sql = "UPDATE users SET 
+                    is_permanently_locked = 0,
+                    failed_attempts = 0,
+                    last_attempt_time = NULL,
+                    lockout_until = NULL
+                    WHERE id = :id";
+        } else {
+            $sql = "UPDATE users SET is_permanently_locked = 1 WHERE id = :id";
+        }
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id' => $userId]);
+        
+        return (bool)$nuevoEstado;
+    }
+
+    /**
+     * Elimina un usuario de la base de datos.
+     * 
+     * @param int $userId ID del usuario
+     * @return bool True si se eliminó, false si no existía
+     */
+    public function eliminarUsuario($userId) {
+        // Primero eliminar las sesiones del usuario
+        $sql = "DELETE FROM user_sessions WHERE user_id = :id";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id' => $userId]);
+        
+        // Luego eliminar el usuario
+        $sql = "DELETE FROM users WHERE id = :id";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id' => $userId]);
+        
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * Obtiene un usuario por ID.
+     * 
+     * @param int $userId ID del usuario
+     * @return array|false Datos del usuario o false si no existe
+     */
+    public function obtenerUsuarioPorId($userId) {
+        $sql = "SELECT id, username, role, failed_attempts, last_attempt_time, 
+                       lockout_until, is_permanently_locked 
+                FROM users WHERE id = :id";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id' => $userId]);
+        
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($user) {
+            $user['username'] = $this->decryptUsername($user['username']);
+        }
+        
+        return $user;
+    }
+
     // ========================================
     // MÉTODOS PARA GESTIÓN DE SESIONES
     // ========================================

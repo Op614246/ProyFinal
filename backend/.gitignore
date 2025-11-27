@@ -1,3 +1,4 @@
 .env
 
-backend/api/logs/
+/backend/api/logs/
+*.log

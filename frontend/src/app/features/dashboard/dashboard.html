@@ -106,14 +106,10 @@
       </h2>
       <p class="text-gray-600 mb-4">Como administrador, tienes acceso a funciones adicionales.</p>
       <div class="flex space-x-4">
-        <button pButton class="p-button-outlined">
+        <a routerLink="/gestion-usuarios" pButton class="p-button-outlined">
           <fa-icon [icon]="['far', 'users']" class="mr-2"></fa-icon>
           Gestionar Usuarios
-        </button>
-        <button pButton class="p-button-outlined p-button-warning">
-          <fa-icon [icon]="['far', 'lock-open']" class="mr-2"></fa-icon>
-          Desbloquear Cuentas
-        </button>
+        </a>
       </div>
     </div>
     }
