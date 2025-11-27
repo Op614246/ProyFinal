@@ -20,8 +20,8 @@ class AuthController {
 
     // Constantes de configuración de bloqueo
     const LOCKOUT_WINDOW = 120;        // 2 minutos en segundos (ventana para acumular intentos)
-    const FIRST_LOCKOUT_MINUTES = 1;   // Primer bloqueo: 5 minutos
-    const SECOND_LOCKOUT_MINUTES = 2; // Segundo bloqueo: 10 minutos
+    const FIRST_LOCKOUT_MINUTES = 5;   // Primer bloqueo: 5 minutos
+    const SECOND_LOCKOUT_MINUTES = 10; // Segundo bloqueo: 10 minutos
     const ATTEMPTS_PER_LEVEL = 3;      // Intentos antes de cada nivel de bloqueo
 
     public function __construct($app) {
@@ -75,7 +75,6 @@ class AuthController {
             $user = $this->repository->obtenerUsuarioPorUsername($username);
 
             if (!$user) {
-                // Usuario no existe - no revelar esta información específica
                 return $this->response(3, ["Credenciales incorrectas."]);
             }
 

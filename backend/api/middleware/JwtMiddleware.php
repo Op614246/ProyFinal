@@ -164,11 +164,11 @@ class JwtMiddleware extends \Slim\Middleware
         $response = $app->response();
         $response->header('Content-Type', 'application/json');
         $response->status(401);
-        echo json_encode([
+        $response->body(json_encode([
             "tipo" => 3,
             "mensajes" => [$message],
             "data" => null
-        ], JSON_UNESCAPED_UNICODE);
+        ], JSON_UNESCAPED_UNICODE));
     }
 }
 
@@ -222,10 +222,10 @@ class RoleMiddleware extends \Slim\Middleware
         $response = $app->response();
         $response->header('Content-Type', 'application/json');
         $response->status(403);
-        echo json_encode([
+        $response->body(json_encode([
             "tipo" => 3,
             "mensajes" => [$message],
             "data" => null
-        ], JSON_UNESCAPED_UNICODE);
+        ], JSON_UNESCAPED_UNICODE));
     }
 }
