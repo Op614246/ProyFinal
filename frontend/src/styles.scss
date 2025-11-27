@@ -1,0 +1,22 @@
+/* You can add global styles to this file, and also import other style files */
+@import "tailwindcss";
+
+/* Custom global styles */
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* PrimeNG Input fixes for Tailwind */
+.p-inputtext {
+  width: 100%;
+}
+
+.p-password {
+  width: 100%;
+}
+
+.p-password-input {
+  width: 100%;
+}

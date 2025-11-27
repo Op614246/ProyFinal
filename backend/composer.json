@@ -1,0 +1,28 @@
+{
+  "require": {
+    "slim/slim": "2.0",
+    "phpoffice/phpspreadsheet": "1.8.2",
+    "monolog/monolog": "1.25.5",
+    "vlucas/phpdotenv": "3.6.10"
+  },
+  "config": {
+    "platform-check": false,
+    "platform": {
+      "php": "7.1.33"
+    }
+  },
+  "autoload": {
+    "psr-4": {
+      "": [
+        "api/controllers/",
+        "api/entity/",
+        "api/logs/",
+        "api/repository/",
+        "smart/validators/",
+        "api/core/",
+        "api/middleware/",
+        "api/config/"
+      ]
+    }
+  }
+}

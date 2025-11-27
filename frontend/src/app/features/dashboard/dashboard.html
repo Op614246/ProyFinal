@@ -1,0 +1,123 @@
+<div class="min-h-screen bg-gray-100">
+  <p-toast></p-toast>
+  <p-confirmDialog></p-confirmDialog>
+
+  <!-- Navbar -->
+  <nav class="bg-white shadow-lg">
+    <div class="max-w-7xl mx-auto px-4">
+      <div class="flex justify-between h-16">
+        <!-- Logo -->
+        <div class="flex items-center">
+          <span class="text-xl font-bold text-blue-600">
+            <fa-icon [icon]="['far', 'shield']" class="mr-2"></fa-icon>
+            ProyFinal
+          </span>
+        </div>
+
+        <!-- User Menu -->
+        <div class="flex items-center space-x-4">
+          <div class="flex items-center space-x-2">
+            <span class="px-2 py-1 rounded text-xs font-semibold" [ngClass]="{
+              'bg-green-100 text-green-800': user?.role === 'admin',
+              'bg-blue-100 text-blue-800': user?.role === 'user'
+            }">
+              {{ user?.role | uppercase }}
+            </span>
+            <span class="text-gray-700 font-medium">{{ user?.username }}</span>
+          </div>
+          
+          <button 
+            pButton 
+            class="p-button-outlined p-button-danger"
+            (click)="logout()"
+          >
+            <fa-icon [icon]="['far', 'right-from-bracket']" class="mr-2"></fa-icon>
+            Cerrar Sesión
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main class="max-w-7xl mx-auto py-6 px-4">
+    <!-- Welcome Card -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <div class="flex items-center">
+        <div class="flex-shrink-0">
+          <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+            <fa-icon [icon]="['far', 'user']" class="text-3xl text-blue-600"></fa-icon>
+          </div>
+        </div>
+        <div class="ml-6">
+          <h1 class="text-2xl font-bold text-gray-800">
+            ¡Bienvenido, {{ user?.username }}!
+          </h1>
+          <p class="text-gray-500">
+            Has iniciado sesión como <strong>{{ user?.role === 'admin' ? 'Administrador' : 'Usuario' }}</strong>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <div class="bg-white rounded-lg shadow-md p-6">
+        <div class="flex items-center">
+          <div class="p-3 bg-green-100 rounded-full">
+            <fa-icon [icon]="['far', 'circle-check']" class="text-2xl text-green-600"></fa-icon>
+          </div>
+          <div class="ml-4">
+            <p class="text-sm text-gray-500">Estado</p>
+            <p class="text-lg font-semibold text-gray-800">Sesión Activa</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-md p-6">
+        <div class="flex items-center">
+          <div class="p-3 bg-blue-100 rounded-full">
+            <fa-icon [icon]="['far', 'shield']" class="text-2xl text-blue-600"></fa-icon>
+          </div>
+          <div class="ml-4">
+            <p class="text-sm text-gray-500">Seguridad</p>
+            <p class="text-lg font-semibold text-gray-800">AES-256 + JWT</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-md p-6">
+        <div class="flex items-center">
+          <div class="p-3 bg-purple-100 rounded-full">
+            <fa-icon [icon]="['far', 'user-gear']" class="text-2xl text-purple-600"></fa-icon>
+          </div>
+          <div class="ml-4">
+            <p class="text-sm text-gray-500">Rol</p>
+            <p class="text-lg font-semibold text-gray-800">{{ user?.role | titlecase }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Panel -->
+    <div *ngIf="isAdmin()" class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">
+        <fa-icon [icon]="['far', 'gear']" class="mr-2"></fa-icon>
+        Panel de Administrador
+      </h2>
+      <p class="text-gray-600 mb-4">
+        Como administrador, tienes acceso a funciones adicionales.
+      </p>
+      <div class="flex space-x-4">
+        <button pButton class="p-button-outlined">
+          <fa-icon [icon]="['far', 'users']" class="mr-2"></fa-icon>
+          Gestionar Usuarios
+        </button>
+        <button pButton class="p-button-outlined p-button-warning">
+          <fa-icon [icon]="['far', 'lock-open']" class="mr-2"></fa-icon>
+          Desbloquear Cuentas
+        </button>
+      </div>
+    </div>
+  </main>
+</div>
