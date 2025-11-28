@@ -1,8 +1,13 @@
 import { NgModule, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from '@angular/core';
 import { BrowserModule, provideClientHydration, withEventReplay } from '@angular/platform-browser';
+import { HttpClientModule } from '@angular/common/http';
 
+import { provideIonicAngular } from '@ionic/angular/standalone';
 import { AppRoutingModule } from './app-routing-module';
 import { App } from './app';
+
+import { CoreModule } from './core/core-module';
+import { FeaturesModule } from './features/features-module';
 
 @NgModule({
   declarations: [
@@ -10,12 +15,16 @@ import { App } from './app';
   ],
   imports: [
     BrowserModule,
-    AppRoutingModule
+    AppRoutingModule,
+    HttpClientModule,
+    CoreModule,
+    FeaturesModule
   ],
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideZonelessChangeDetection(),
-    provideClientHydration(withEventReplay())
+    provideClientHydration(withEventReplay()),
+    provideIonicAngular({}),
   ],
   bootstrap: [App]
 })
