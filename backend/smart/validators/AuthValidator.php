@@ -227,7 +227,7 @@ class AuthValidator
 
     public function wrongPassword(int $attemptsRemaining): array
     {
-        $mensajes = ["❌ Credenciales incorrectas."];
+        $mensajes = ["Credenciales incorrectas."];
 
         if ($attemptsRemaining > 0) {
             $mensajes[] = "Le quedan {$attemptsRemaining} intento(s) antes del bloqueo.";
@@ -244,7 +244,7 @@ class AuthValidator
         return [
             'tipo' => 3,
             'mensajes' => [
-                "❌ Credenciales incorrectas.",
+                "Credenciales incorrectas.",
                 "Ha superado los 3 intentos permitidos.",
                 "Su cuenta ha sido bloqueada por 5 minutos."
             ]
@@ -256,7 +256,7 @@ class AuthValidator
         return [
             'tipo' => 3,
             'mensajes' => [
-                "❌ Credenciales incorrectas.",
+                "Credenciales incorrectas.",
                 "Reincidencia en intentos fallidos detectada.",
                 "Su cuenta ha sido bloqueada por 10 minutos."
             ]

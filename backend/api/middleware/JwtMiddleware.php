@@ -46,17 +46,37 @@ class JwtMiddleware extends \Slim\Middleware
         // Obtener el header Authorization (Slim 2.0 usa headers() como método)
         $authHeader = $request->headers('Authorization');
 
-        if (!$authHeader) {
+        // Fallbacks si Slim no encuentra la cabecera (Apache puede pasarla en HTTP_AUTHORIZATION o REDIRECT_HTTP_AUTHORIZATION)
+        if (empty($authHeader)) {
+            if (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
+                $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
+            } elseif (!empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+                $authHeader = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+            } else {
+                // intentar apache_request_headers si está disponible
+                if (function_exists('apache_request_headers')) {
+                    $headers = apache_request_headers();
+                    if (!empty($headers['Authorization'])) {
+                        $authHeader = $headers['Authorization'];
+                    } elseif (!empty($headers['authorization'])) {
+                        $authHeader = $headers['authorization'];
+                    }
+                }
+            }
+        }
+
+        if (empty($authHeader)) {
             return $this->unauthorized($app, "Token de autorización no proporcionado.");
         }
 
-        // Verificar formato "Bearer <token>"
-        if (strpos($authHeader, 'Bearer ') !== 0) {
+        // Normalizar y verificar formato "Bearer <token>" (case-insensitive)
+        $authHeader = trim($authHeader);
+        if (stripos($authHeader, 'Bearer ') !== 0) {
             return $this->unauthorized($app, "Formato de token inválido. Use: Bearer <token>");
         }
 
-        // Extraer el token
-        $token = substr($authHeader, 7);
+        // Extraer el token (parte después de 'Bearer ')
+        $token = trim(substr($authHeader, 7));
 
         if (empty($token)) {
             return $this->unauthorized($app, "Token vacío.");
