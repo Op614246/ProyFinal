@@ -5,6 +5,7 @@ import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 
 import { CoreRoutingModule } from './core-routing-module';
 import { Login } from './login/login';
+import { IonicModule } from '@ionic/angular';
 
 // FontAwesome
 import { FontAwesomeModule, FaIconLibrary } from '@fortawesome/angular-fontawesome';
@@ -30,7 +31,8 @@ import { AuthService } from './services/auth.service';
     ReactiveFormsModule,
     FormsModule,
     HttpClientModule,
-    FontAwesomeModule
+    FontAwesomeModule,
+    IonicModule
   ],
   providers: [
     CryptoService,

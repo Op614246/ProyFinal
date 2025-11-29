@@ -1,1 +1,84 @@
-<p>login works!</p>
+<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600 p-2 sm:p-4">
+  <div class="w-full sm:max-w-md max-w-full bg-white rounded-xl shadow-xl overflow-visible mx-2 sm:mx-0">
+    <div class="p-4 sm:p-8">
+      <div class="flex flex-col items-center">
+        <div class="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-blue-100 flex items-center justify-center">
+          <fa-icon [icon]="['far','lock']" class="text-xl sm:text-2xl text-blue-600"></fa-icon>
+        </div>
+        <h1 class="text-xl sm:text-2xl font-semibold text-gray-800">Iniciar Sesión</h1>
+        <p class="text-xs sm:text-sm text-gray-500 mt-1">Ingresa tus credenciales para continuar</p>
+      </div>
+
+      <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="mt-4 sm:mt-6">
+        <div class="space-y-3 sm:space-y-4">
+          <!-- Usuario -->
+          <div>
+            <label class="block text-sm font-semibold text-gray-600 mb-1">Usuario</label>
+            <div class="flex items-center">
+              <fa-icon [icon]="['far','user']" class="text-gray-400 mr-2 text-base sm:text-lg"></fa-icon>
+              <input
+                formControlName="username"
+                type="text"
+                class="flex-1 w-full bg-white border border-gray-200 placeholder-gray-400 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all"
+                [class.border-red-400]="f['username'].touched && f['username'].invalid"
+                [class.border-gray-200]="!(f['username'].touched && f['username'].invalid)"
+                placeholder="Usuario"
+              />
+            </div>
+            <div class="min-h-[20px] pt-0.5">
+              @if (f['username'].touched && f['username'].invalid) {
+              <div class="text-red-500 text-xs pl-8 mt-2 mb-1">
+                @if(f['username'].errors?.['required']){ <p>El usuario es requerido.</p> }
+                @if(f['username'].errors?.['minlength']){ <p>Mínimo 3 caracteres.</p> }
+              </div>
+              }
+            </div>
+          </div>
+
+          <!-- Contraseña -->
+          <div>
+            <label class="block text-sm font-semibold text-gray-600 mb-1">Contraseña</label>
+            <div class="flex items-center">
+              <fa-icon [icon]="['far','lock']" class="text-gray-400 mr-2 text-base sm:text-lg"></fa-icon>
+              <input
+                formControlName="password"
+                type="password"
+                class="flex-1 w-full bg-white border border-gray-200 placeholder-gray-400 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all"
+                [class.border-red-400]="f['password'].touched && f['password'].invalid"
+                [class.border-gray-200]="!(f['password'].touched && f['password'].invalid)"
+                placeholder="Contraseña"
+              />
+            </div>
+            <div class="min-h-[20px] pt-0.5">
+              @if (f['password'].touched && f['password'].invalid) {
+              <div class="text-red-500 text-xs pl-8 mt-2 mb-1">
+                @if(f['password'].errors?.['required']){ <p>La contraseña es requerida.</p> }
+                @if(f['password'].errors?.['minlength']){ <p>Mínimo 6 caracteres.</p> }
+              </div>
+              }
+            </div>
+          </div>
+
+          <div class="px-4 sm:px-6">
+            <button
+              type="submit"
+              [disabled]="loading"
+              class="w-full py-4 sm:py-5 bg-blue-600 hover:bg-blue-700 text-white font-bold disabled:opacity-60 flex items-center justify-center text-lg sm:text-xl relative z-10 rounded-lg shadow-md"
+              style="border-radius:0.5rem; box-shadow:0 6px 14px rgba(37,99,235,0.18);"
+            >
+              @if (!loading) {
+                <fa-icon [icon]="['far','right-to-bracket']" class="mr-2 text-lg sm:text-xl"></fa-icon>
+                <span>Iniciar Sesión</span>
+              }
+              @if (loading) {
+                <span class="flex items-center"><i class="animate-spin fas fa-spinner mr-2"></i>Procesando...</span>
+              }
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <p class="text-center text-xs sm:text-sm text-gray-500 mt-6">Sistema de Autenticación Seguro<br/><span class="text-[10px] sm:text-xs text-gray-400">Encriptación AES-256 • JWT</span></p>
+    </div>
+  </div>
+</div>
