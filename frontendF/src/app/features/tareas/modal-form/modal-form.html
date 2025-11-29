@@ -1,1 +1,74 @@
-<p>modal-form works!</p>
+<div class="p-4 flex flex-col gap-4 mt-4">
+  <!-- Título -->
+  <span class="text-base font-bold text-gray-900">Reaperturar tarea</span>
+
+  <!-- Campo Motivo -->
+  <div class="flex flex-col gap-1">
+    <span class="text-xs font-medium">Motivo</span>
+    <ion-textarea 
+      fill="outline" 
+      rows="4" 
+      class="text-sm" 
+      placeholder="Escribe aquí..."
+      [(ngModel)]="motivo">
+    </ion-textarea>
+  </div>
+
+  <!-- Toggle Reasignar tarea -->
+  <div class="flex items-center gap-2">
+    <span class="text-xs">Reasignar tarea</span>
+    <ion-toggle 
+      [(ngModel)]="reasignarTarea" 
+      color="primary"
+      (ionChange)="onToggleChange()">
+    </ion-toggle>
+  </div>
+
+  <!-- Campos de asignación (solo cuando toggle activado) -->
+  <div class="h-40">
+    <div *ngIf="reasignarTarea" class="flex gap-2">
+      <!-- Campo Cargo -->
+      <div class="space-y-1 w-full">
+        <label class="block text-xs font-medium">Cargo</label>
+        <div class="relative">
+          <div 
+            (click)="abrirModalCargo()"
+            class="flex items-center justify-between p-3 border border-gray-300 rounded-lg bg-white cursor-pointer min-h-[44px]">
+            <span class="text-sm">{{cargoSeleccionado || 'Selecciona cargo'}}</span>
+            <fa-icon [icon]="faCaretDown" class="text-sm"></fa-icon>
+          </div>
+        </div>
+      </div>
+
+      <!-- Campo Usuario -->
+      <div class="space-y-1 w-full">
+        <label class="block text-xs font-medium">Usuario</label>
+        <div class="relative">
+          <div 
+            (click)="abrirModalUsuario()"
+            class="flex items-center justify-between p-3 border border-gray-300 rounded-lg bg-white cursor-pointer min-h-[44px]">
+            <span class="text-sm">{{usuarioSeleccionado || 'Selecciona usuario'}}</span>
+            <fa-icon [icon]="faCaretDown" class="text-sm"></fa-icon>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Botones de acción -->
+  <div class="flex gap-2">
+    <ion-button 
+      fill="outline" 
+      class="w-full"
+      (click)="cancelar()">
+      Cancelar
+    </ion-button>
+    <ion-button 
+      class="w-full"
+      [disabled]="!puedeConfirmar"
+      (click)="confirmar()">
+      <span class="mr-2">Confirmar</span>
+      <fa-icon [icon]="faCircleChevronRight"></fa-icon>
+    </ion-button>
+  </div>
+</div>

@@ -25,10 +25,11 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
-    // Guardar la URL intentada para redirigir después del login
-    this.router.navigate(['/login'], {
-      queryParams: { returnUrl: state.url }
-    });
+    // Limpiar cualquier token inválido
+    this.tokenService.clear();
+    
+    // Redirigir al login
+    this.router.navigate(['/login']);
     return false;
   }
 }

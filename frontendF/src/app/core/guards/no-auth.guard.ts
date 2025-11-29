@@ -5,7 +5,7 @@ import { TokenService } from '../services/token.service';
 /**
  * NoAuthGuard
  * 
- * Redirige a dashboard si ya está autenticado
+ * Redirige a tareas si ya está autenticado
  * Útil para la página de login
  */
 @Injectable({
@@ -20,7 +20,7 @@ export class NoAuthGuard implements CanActivate {
 
   canActivate(): boolean {
     if (this.tokenService.isLoggedIn()) {
-      this.router.navigate(['/dashboard']);
+      this.router.navigate(['/features/tareas']);
       return false;
     }
     return true;

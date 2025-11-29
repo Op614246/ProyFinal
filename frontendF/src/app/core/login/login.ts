@@ -3,6 +3,7 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { AuthService } from '../services/auth.service';
+import { TokenService } from '../services/token.service';
 import { ToastService } from '../../shared/services/toast.service';
 
 @Component({
@@ -16,12 +17,13 @@ import { ToastService } from '../../shared/services/toast.service';
 export class Login implements OnInit, OnDestroy {
   loginForm!: FormGroup;
   loading = false;
-  returnUrl: string = '/dashboard';
+  returnUrl: string = '/features/tareas';
   private destroy$ = new Subject<void>();
 
   constructor(
     private fb: FormBuilder,
     private authService: AuthService,
+    private tokenService: TokenService,
     private router: Router,
     private route: ActivatedRoute,
     private toastService: ToastService,
@@ -29,19 +31,19 @@ export class Login implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    // Crear formulario
+    // Limpiar cualquier dato anterior al cargar el login
+    this.tokenService.clear();
+    
+    // Crear formulario vacío
     this.loginForm = this.fb.group({
       username: ['', [Validators.required, Validators.minLength(3)]],
       password: ['', [Validators.required, Validators.minLength(6)]]
     });
 
     // Obtener URL de retorno si existe
-    this.returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/dashboard';
-
-    // Si ya está autenticado, redirigir
-    if (this.authService.isAuthenticated()) {
-      this.router.navigate([this.returnUrl]);
-    }
+    this.returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/features/tareas';
+    
+    this.cdr.markForCheck();
   }
 
   ngOnDestroy(): void {
@@ -74,21 +76,22 @@ export class Login implements OnInit, OnDestroy {
           
           if (response.tipo === 1) {
             // Login exitoso
-            this.toastService.presentToast(response.mensajes[0], 'success');
+            this.toastService.presentToast(response.mensajes[0] || 'Bienvenido', 'success');
             
             // Redirigir después de un pequeño delay para mostrar el mensaje
             setTimeout(() => {
               this.router.navigate([this.returnUrl]);
-            }, 1000);
+            }, 800);
           } else {
             // Error o advertencia
-            this.showErrors(response.mensajes);
+            this.showErrors(response.mensajes || ['Error en el inicio de sesión']);
           }
         },
         error: (error) => {
           this.loading = false;
           this.cdr.markForCheck();
-          this.showErrors(error.mensajes || ['Error de conexión']);
+          console.error('Error de login:', error);
+          this.showErrors(error.mensajes || ['Error de conexión con el servidor']);
         }
       });
   }
@@ -97,9 +100,13 @@ export class Login implements OnInit, OnDestroy {
    * Muestra mensajes de error
    */
   private showErrors(messages: string[]): void {
-    messages.forEach(msg => {
-      this.toastService.presentToast(msg, 'danger');
-    });
+    if (messages && messages.length > 0) {
+      messages.forEach(msg => {
+        this.toastService.presentToast(msg, 'danger');
+      });
+    } else {
+      this.toastService.presentToast('Error desconocido', 'danger');
+    }
   }
 
   /**

@@ -1,1 +1,367 @@
-<p>tareas-info works!</p>
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-button fill="clear" size="small" (click)="goBack()">
+        <ion-icon name="chevron-back-outline" class="text-xl text-[#3B82F6]"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-title>
+      <span class="-ml-12 font-medium text-[#000000]">Actividad ID-{{getFormattedId(tareaAdminSeleccionada?.id)}}</span>
+    </ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="bg-gray-50">
+  <div class="h-full flex flex-col">
+    <!-- Tarjeta de tarea -->
+    <div class="m-4">
+      <div class="p-4 bg-[#FFF9E7] rounded-lg border-l-4 border-[#F2A626]">
+        <div class="flex items-center gap-2">
+          <p class="text-gray-800 text-xs font-semibold">
+            {{tareaAdminSeleccionada?.titulo || 'Sin título'}}
+          </p>
+          <div class="px-3 py-1 rounded-full flex items-center gap-1 ml-auto whitespace-nowrap"
+               [ngClass]="{
+                 'bg-[#FFC800]': tareaAdminSeleccionada?.estado === 'Pendiente',
+                 'bg-blue-500': tareaAdminSeleccionada?.estado === 'En progreso',
+                 'bg-[#6DC560]': tareaAdminSeleccionada?.estado === 'Completada'
+               }">
+            <span class="text-white text-[10px] font-medium">{{tareaAdminSeleccionada?.estado || 'Pendiente'}}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Descripción de la tarea seleccionada -->
+    <div class="px-4 mb-2">
+      <h2 class="text-[#636E95] text-xs font-bold mb-1">Descripción</h2>
+      <p class="text-[#000000] font-normal text-[10px] leading-relaxed">
+        {{tareaAdminSeleccionada?.titulo || 'Sin descripción disponible'}}
+      </p>
+    </div>
+
+    <!-- Información de la tarea seleccionada -->
+    <div class="px-4 mb-4">
+      <!-- Categoría -->
+      <div class="flex gap-14 mb-1">
+        <div class="flex flex-row items-center gap-1">
+          <ion-icon name="layers-outline" style="font-size: 10px; font-weight: normal;" class="text-neutral-700"></ion-icon>
+          <span class="text-[#363636] text-[10px] font-normal">Categoría: {{tareaAdminSeleccionada?.Categoria || 'Sin categoría'}}</span>
+        </div>
+        <div class="flex flex-row items-center gap-1">
+          <ion-icon name="layers-outline" style="font-size: 10px; font-weight: normal;" class="text-[#363636]"></ion-icon>
+          <span class="text-[#363636] text-[10px] font-normal">Sucursal: {{tareaAdminSeleccionada?.sucursal || 'Sin sucursal'}}</span>
+        </div>
+      </div>
+      
+      <div class="flex flex-row gap-4 items-center">
+        <!-- Horario -->
+        <div class="flex items-center gap-1">
+          <ion-icon name="time-outline" style="font-size: 10px; font-weight: normal;" class="text-gray-400"></ion-icon>
+          <span class="text-[#363636] text-[10px] font-normal">Hora programada: {{tareaAdminSeleccionada?.horaprogramada || '--:--'}}</span>
+        </div>
+
+        <!-- Hora inicio/fin -->
+        <div class="flex items-center gap-1">
+          <ion-icon name="time-outline" style="font-size: 10px; font-weight: normal;" class="text-gray-400"></ion-icon>
+          <span class="text-[#363636] text-[10px] font-normal">Hora Inicio: {{tareaAdminSeleccionada?.horainicio || '--:--'}}</span>
+        </div>
+        <div class="flex items-center gap-1">
+          <ion-icon name="time-outline" style="font-size: 10px; font-weight: normal;" class="text-gray-400"></ion-icon>
+          <span class="text-[#363636] text-[10px] font-normal">Hora fin: {{tareaAdminSeleccionada?.horafin || '--:--'}}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lista de tareas section -->
+    <div class="px-4 pb-4">
+      <div class="flex justify-between items-center mb-2">
+        <h1 class="text-sm font-bold text-gray-900">Lista de tareas</h1>
+        <span class="text-gray-400 text-sm">{{progresoGeneral.completadas}}/{{progresoGeneral.total}}</span>
+      </div>
+      <!-- Barra de progreso -->
+      <div class="w-full bg-gray-200 rounded-full h-2">
+        <div class="bg-[#6DC560] h-2 rounded-full" [style.width.%]="progresoGeneral.porcentaje"></div>
+      </div>
+    </div>
+
+    <!-- Buscador y filtros -->
+    <div class="flex flex-row gap-2 px-4 pb-2">
+      <ion-searchbar
+        class="sinsombra border border-text-10 rounded-lg h-12 p-0"
+        placeholder="Buscar pendientes"
+        [(ngModel)]="searchTerm"
+        [debounce]="800"
+        clear-icon="close-circle-outline">
+      </ion-searchbar>
+      <ion-button fill="outline" size="small" (click)="openmodalfiltronormaloadmin()">
+        <fa-icon [icon]="faSliders"></fa-icon>
+      </ion-button>
+    </div>
+
+    <!-- Lista de tareas -->
+    <div class="max-h-[700px] overflow-scroll pb-2 flex-grow">
+      <!-- Tareas Completadas -->
+      <div class="px-4 space-y-4" *ngIf="tareaAdminSeleccionada?.estado === 'Completada'">
+        <div class="flex flex-row items-center gap-2" *ngFor="let subtarea of tareasCompletadas; let isLast = last">
+          <div class="relative">
+            <div class="h-[155px] absolute left-[7px] top-5 border-[0.5px] border-solid outline-stone-300" *ngIf="!isLast"></div>
+            <div class="w-4 h-4 bg-indigo-50 rounded-[10px] inline-flex flex-col justify-center items-center">
+              <div class="text-center justify-start bg-primary w-2 h-2 rounded-full"></div>
+            </div>
+          </div>
+            
+          <div class="bg-white rounded-xl w-full p-2 shadow-[0px_2px_5px_0px_rgba(0,0,0,0.09)] relative cursor-pointer" 
+               (click)="navegarASubtarea(subtarea)">
+            <!-- Estado completada -->
+            <div class="absolute top-0 right-0 rounded-tr-lg rounded-bl-lg w-[70px] h-[20px] flex items-center justify-center" [ngClass]="{
+                      'bg-[#6DC560]': subtarea.estado === 'Completada',
+                      'bg-blue-500': subtarea.estado === 'En progreso',
+                      'bg-[#FFC800]': subtarea.estado === 'Pendiente'
+                    }">
+              <span class="text-white text-[10px] font-medium">{{subtarea.estado}}</span>
+            </div>
+            <div class="flex h-[28px] items-center">
+              <h3 class="text-gray-900 line-clamp-2 font-semibold text-xs">{{subtarea.titulo}}</h3>
+            </div>
+            
+            <div class="flex flex-col gap-1 mt-1">
+              <div class="flex items-center gap-2">
+                <ion-icon name="layers-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                <span class="text-gray-600 text-[10px]">Responsable: {{subtarea.usuarioasignado}}</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <ion-icon name="layers-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                <span class="text-gray-600 text-[10px]">Subcategoría: {{subtarea.Categoria}}</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <ion-icon name="layers-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                <span class="text-gray-600 text-[10px]">Hora programada: {{subtarea.horaprogramada || '7:00 AM'}}</span>
+              </div>
+              
+              <div class="flex flex-row gap-1">
+                <div class="flex items-center gap-2">
+                  <ion-icon name="time-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                  <span class="text-gray-600 text-[10px]">Inicio: {{subtarea.horainicio}}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <ion-icon name="time-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                  <span class="text-gray-600 text-[10px]">Fin: {{subtarea.horafin}}</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Tags de estado y prioridad -->
+            <div class="flex items-center justify-between mt-1">
+              <div class="flex gap-2">
+                <div class="self-end px-2 py-1 flex rounded-full h-[18px]" [ngClass]="{
+                        'bg-[#F5FBF4] text-[#77B865]': subtarea.estadodetarea === 'Activo',
+                        'bg-[#E4E4E4] text-[#878787]': subtarea.estadodetarea === 'Inactiva'
+                      }">
+                  <span class="self-center text-[8px] rounded-full font-normal">{{subtarea.estadodetarea}}</span>
+                </div>
+                <div class="flex items-center justify-center rounded-full px-2 w-[50px] gap-1 h-[18px]" [ngClass]="{
+                        'bg-green-100 text-green-600': subtarea.Prioridad === 'Baja',
+                        'bg-yellow-100 text-yellow-500': subtarea.Prioridad === 'Media',
+                        'bg-red-100 text-[#EF4444]': subtarea.Prioridad === 'Alta'
+                      }">
+                  <fa-icon [icon]="faFlag" class="text-[8px]"></fa-icon>
+                  <span class="text-[8px] font-normal">{{subtarea.Prioridad}}</span>
+                </div>
+              </div>
+              <button class="flex items-center w-[69px] h-[24px] justify-center cursor-pointer bg-[#3b82f6] px-2 py-[5px] rounded"
+                      (click)="abrirModalReaperturar(); $event.stopPropagation()">
+                <span class="font-medium text-[10px] text-white">Reaperturar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tareas Pendientes -->
+      <div class="px-4 space-y-4" *ngIf="tareaAdminSeleccionada?.estado === 'Pendiente'">
+        <div class="flex flex-row items-center gap-2" *ngFor="let subtarea of tareasListaPendientes; let isLast = last">
+          <div class="relative">
+            <div class="h-[158px] absolute left-[7px] top-5 border-[0.5px] border-solid outline-stone-300" *ngIf="!isLast"></div>
+            <div class="w-4 h-4 bg-indigo-50 rounded-[10px] inline-flex flex-col justify-center items-center">
+              <div class="text-center justify-start bg-primary w-2 h-2 rounded-full"></div>
+            </div>
+          </div>
+
+          <div class="bg-white h-[136px] rounded-xl w-full p-2 shadow-[0px_2px_5px_0px_rgba(0,0,0,0.09)] relative cursor-pointer"
+               (click)="navegarASubtarea(subtarea)">
+            <!-- Estado pendiente -->
+            <div class="absolute top-0 right-0 rounded-tr-lg rounded-bl-lg w-[70px] h-[20px] flex items-center justify-center" [ngClass]="{
+                      'bg-[#6DC560]': subtarea.estado === 'Completada',
+                      'bg-blue-500': subtarea.estado === 'En progreso',
+                      'bg-[#FFC800]': subtarea.estado === 'Pendiente'
+                    }">
+              <span class="text-white text-[10px] font-medium">{{subtarea.estado}}</span>
+            </div>
+            <div class="flex h-[28px] items-center">
+              <h3 class="text-gray-900 line-clamp-2 font-semibold text-xs">{{subtarea.titulo}}</h3>
+            </div>
+            
+            <div class="flex flex-col gap-1 mt-1">
+              <div class="flex items-center gap-2">
+                <ion-icon name="layers-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                <span class="text-gray-600 text-[10px]">Responsable: {{subtarea.usuarioasignado}}</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <ion-icon name="layers-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                <span class="text-gray-600 text-[10px]">Subcategoría: {{subtarea.Categoria}}</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <ion-icon name="layers-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                <span class="text-gray-600 text-[10px]">Hora programada: {{subtarea.horaprogramada || '7:00 AM'}}</span>
+              </div>
+              
+              <div class="flex flex-row gap-1">
+                <div class="flex items-center gap-2">
+                  <ion-icon name="time-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                  <span class="text-gray-600 text-[10px]">Inicio: {{subtarea.horainicio}}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <ion-icon name="time-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                  <span class="text-gray-600 text-[10px]">Fin: {{subtarea.horafin}}</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Tags de estado -->
+            <div class="flex items-center justify-between">
+              <div class="flex gap-2">
+                <div class="self-end px-2 py-1 flex rounded-full h-[18px]" [ngClass]="{
+                        'bg-[#F5FBF4] text-[#77B865]': subtarea.estadodetarea === 'Activo',
+                        'bg-[#E4E4E4] text-[#878787]': subtarea.estadodetarea === 'Inactiva'
+                      }">
+                  <span class="self-center text-[8px] rounded-full font-normal">{{subtarea.estadodetarea}}</span>
+                </div>
+                <div class="flex items-center justify-center rounded-full px-2 w-[50px] gap-1 h-[18px]" [ngClass]="{
+                        'bg-green-100 text-green-600': subtarea.Prioridad === 'Baja',
+                        'bg-yellow-100 text-yellow-500': subtarea.Prioridad === 'Media',
+                        'bg-red-100 text-[#EF4444]': subtarea.Prioridad === 'Alta'
+                      }">
+                  <fa-icon [icon]="faFlag" class="text-[8px]"></fa-icon>
+                  <span class="text-[8px] font-normal">{{subtarea.Prioridad}}</span>
+                </div>
+              </div>
+              <button class="flex items-center w-[69px] h-[24px] justify-center cursor-pointer bg-primary px-2 py-[5px] rounded-[5px]"
+                      (click)="abrirModalEditar(subtarea); $event.stopPropagation()">
+                <span class="font-medium text-[10px] text-white">Editar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tareas En Progreso -->
+      <div class="px-4 space-y-4" *ngIf="tareaAdminSeleccionada?.estado === 'En progreso'">
+        <div class="flex flex-row items-center gap-2" *ngFor="let subtarea of subtareas; let isLast = last">
+          <div class="relative">
+            <div class="h-[158px] absolute left-[7px] top-5 border-[0.5px] border-solid outline-stone-300" *ngIf="!isLast"></div>
+            <div class="w-4 h-4 bg-indigo-50 rounded-[10px] inline-flex flex-col justify-center items-center">
+              <div class="text-center justify-start bg-primary w-2 h-2 rounded-full"></div>
+            </div>
+          </div>
+          
+          <div class="bg-white h-[136px] rounded-lg w-full p-2 shadow-[0px_2px_5px_0px_rgba(0,0,0,0.09)] relative cursor-pointer" 
+               (click)="navegarASubtarea(subtarea)">
+            <!-- Estado dinámico -->
+            <div class="absolute top-0 right-0 rounded-tr-lg rounded-bl-lg w-[70px] h-[20px] flex items-center justify-center" [ngClass]="{
+                      'bg-[#6DC560]': subtarea.estado === 'Completada',
+                      'bg-blue-500': subtarea.estado === 'En progreso',
+                      'bg-[#FFC800]': subtarea.estado === 'Pendiente'
+                    }">
+              <span class="text-white text-[10px] font-medium">{{subtarea.estado}}</span>
+            </div>
+            <div class="flex h-[28px] items-center">
+              <h3 class="text-gray-900 line-clamp-2 font-semibold text-xs">{{subtarea.titulo}}</h3>
+            </div>
+            
+            <div class="flex flex-col gap-1 mt-1">
+              <div class="flex items-center gap-2">
+                <ion-icon name="layers-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                <span class="text-gray-600 text-[10px]">Responsable: {{subtarea.usuarioasignado}}</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <ion-icon name="layers-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                <span class="text-gray-600 text-[10px]">Subcategoría: {{subtarea.Categoria}}</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <ion-icon name="layers-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                <span class="text-gray-600 text-[10px]">Hora programada: {{subtarea.horaprogramada || '7:00 AM'}}</span>
+              </div>
+              
+              <div class="flex flex-row gap-1">
+                <div class="flex items-center gap-2">
+                  <ion-icon name="time-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                  <span class="text-gray-600 text-[10px]">Inicio: {{subtarea.horainicio}}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <ion-icon name="time-outline" class="text-gray-500 text-[10px]"></ion-icon>
+                  <span class="text-gray-600 text-[10px]">Fin: {{subtarea.horafin}}</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Tags de estado -->
+            <div class="flex items-center justify-between mt-1">
+              <div class="flex gap-2">
+                <div class="self-end px-2 py-1 flex rounded-full h-[18px]" [ngClass]="{
+                        'bg-[#F5FBF4] text-[#77B865]': subtarea.estadodetarea === 'Activo',
+                        'bg-[#E4E4E4] text-[#878787]': subtarea.estadodetarea === 'Inactiva'
+                      }">
+                  <span class="self-center text-[8px] rounded-full font-normal">{{subtarea.estadodetarea}}</span>
+                </div>
+                <div class="flex items-center justify-center rounded-full px-2 w-[50px] gap-1 h-[18px]" [ngClass]="{
+                        'bg-green-100 text-green-600': subtarea.Prioridad === 'Baja',
+                        'bg-yellow-100 text-yellow-500': subtarea.Prioridad === 'Media',
+                        'bg-red-100 text-[#EF4444]': subtarea.Prioridad === 'Alta'
+                      }">
+                  <fa-icon [icon]="faFlag" class="text-[8px]"></fa-icon>
+                  <span class="text-[8px] font-normal">{{subtarea.Prioridad}}</span>
+                </div>
+              </div>
+              <!-- Botón Reaperturar para subtareas completadas -->
+              <button *ngIf="subtarea.estado === 'Completada'" 
+                      class="flex items-center w-[69px] h-[24px] justify-center cursor-pointer bg-primary px-2 py-[5px] rounded"
+                      (click)="abrirModalReaperturar(); $event.stopPropagation()">
+                <span class="font-bold text-[10px] text-white">Reaperturar</span>
+              </button>
+              <!-- Botón Editar para subtareas pendientes -->
+              <button *ngIf="subtarea.estado === 'Pendiente'" 
+                      class="flex items-center w-[69px] h-[24px] justify-center cursor-pointer bg-primary px-2 py-[5px] rounded"
+                      (click)="abrirModalEditar(subtarea); $event.stopPropagation()">
+                <span class="font-medium text-[10px] text-white">Editar</span>
+              </button>
+              <!-- Botón pequeño para otros estados cuando no es admin -->
+              <button *ngIf="subtarea.estado === 'En progreso' && !isApartadoAdmin" 
+                      class="flex w-7 h-7 border border-[#3B82F6] border-solid items-center justify-center cursor-pointer bg-[#ECF4FF] rounded-[5px]" 
+                      (click)="navegarACrearTarea(); $event.stopPropagation()">
+                <ion-icon name="create-outline" class="text-[#3B82F6] text-[12px]"></ion-icon>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Botón crear tarea -->
+    <div class="p-4">
+      <ion-button 
+        fill="clear" 
+        class="w-full bg-primary rounded" 
+        size="large" 
+        (click)="navegarACrearTarea()">
+        <span class="text-white">Crear tarea</span>
+      </ion-button>
+    </div>
+  </div>
+</ion-content>

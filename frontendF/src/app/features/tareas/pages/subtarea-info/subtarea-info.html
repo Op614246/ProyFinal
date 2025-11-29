@@ -1,1 +1,163 @@
-<p>subtarea-info works!</p>
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-button fill="clear" size="small" (click)="goBack()">
+        <ion-icon name="chevron-back-outline" class="text-xl text-[#3B82F6]"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-title>
+      <span class="-ml-12 text-[#000000]" *ngIf="!tareasService.apartadoadmin">Tarea N° 0{{tarea?.id}}</span>
+      <span class="-ml-12 text-[#000000]" *ngIf="tareasService.apartadoadmin">Tarea</span>
+    </ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <div class="h-full flex flex-col">
+    <!-- Tarjeta de tarea -->
+    <div class="mb-4">
+      <div class="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+        <div class="flex items-center gap-2">
+          <p class="text-gray-800 text-xs font-semibold">{{tarea?.titulo}}</p>
+          <div class="px-3 py-1 rounded-full flex items-center gap-1 ml-auto whitespace-nowrap"
+               [ngClass]="{
+                 'bg-[#FFC800]': tarea?.estado === 'Pendiente',
+                 'bg-[#3B82F6]': tarea?.estado === 'En progreso',
+                 'bg-[#6DC560]': tarea?.estado === 'Completada',
+                 'bg-[#C7C7C7]': tarea?.estado === 'Cerrada'
+               }">
+            <span class="text-white text-[10px] font-medium">{{tarea?.estado || 'Pendiente'}}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Descripción -->
+    <div class="mb-2">
+      <h2 class="text-[#636E95] text-xs font-bold mb-1">Descripción</h2>
+      <p class="text-[#000000] font-normal text-[10px] leading-relaxed">
+        {{tarea?.descripcion || 'Sin descripción'}}
+      </p>
+    </div>
+
+    <!-- Información de la tarea -->
+    <div class="mb-4">
+      <div class="flex gap-4 mb-1">
+        <div class="flex flex-row items-center gap-1">
+          <ion-icon name="layers-outline" class="text-[10px] text-[#363636]"></ion-icon>
+          <span class="text-[#363636] text-[10px] font-normal">Categoría: {{tarea?.Categoria || 'Sin categoría'}}</span>
+        </div>
+        <div class="flex flex-row items-center gap-1">
+          <ion-icon name="folder-open-outline" class="text-[10px] text-[#363636]"></ion-icon>
+          <span class="text-[#363636] text-[10px] font-normal">Estado: {{tarea?.estado}}</span>
+        </div>
+      </div>
+
+      <div class="flex flex-row gap-4 items-center">
+        <div class="flex items-center gap-1">
+          <ion-icon name="time-outline" class="text-[10px] text-[#363636]"></ion-icon>
+          <span class="text-[#363636] text-[10px] font-normal">Programada: {{tarea?.horaprogramada || '--:--'}}</span>
+        </div>
+        <div class="flex flex-row items-center gap-1">
+          <ion-icon name="time-outline" class="text-[10px] text-[#363636]"></ion-icon>
+          <span class="text-[#363636] text-[10px] font-normal">Inicio: {{tarea?.horainicio || '--:--'}}</span>
+        </div>
+        <div class="flex flex-row items-center gap-1">
+          <ion-icon name="time-outline" class="text-[10px] text-[#363636]"></ion-icon>
+          <span class="text-[#363636] text-[10px] font-normal">Fin: {{tarea?.horafin || '--:--'}}</span>
+        </div>
+      </div>
+
+      <!-- Prioridad badge -->
+      <div *ngIf="!tareasService.apartadoadmin" 
+           class="p-2 w-[71px] h-[18px] rounded-full flex items-center justify-center gap-1 mt-2"
+           [ngClass]="{
+             'bg-green-100': tarea?.Prioridad === 'Baja',
+             'bg-yellow-100': tarea?.Prioridad === 'Media',
+             'bg-red-100': tarea?.Prioridad === 'Alta'
+           }">
+        <fa-icon [icon]="faFlag" class="text-[10px]" 
+                 [ngClass]="{
+                   'text-yellow-500': tarea?.Prioridad === 'Media',
+                   'text-[#EF4444]': tarea?.Prioridad === 'Alta',
+                   'text-green-600': tarea?.Prioridad === 'Baja'
+                 }"></fa-icon>
+        <span class="text-[10px] font-normal"
+              [ngClass]="{
+                'text-yellow-500': tarea?.Prioridad === 'Media',
+                'text-[#EF4444]': tarea?.Prioridad === 'Alta',
+                'text-green-600': tarea?.Prioridad === 'Baja'
+              }">
+          {{tarea?.Prioridad}}
+        </span>
+      </div>
+    </div>
+
+    <!-- Aviso para tareas pendientes -->
+    <div class="w-full mb-4" *ngIf="tarea?.estado === 'Pendiente'">
+      <div class="p-[4px] bg-[#FFF3EC] rounded flex flex-row items-center gap-2">
+        <ion-icon name="information-circle-outline" class="text-orange-400 text-[10px]"></ion-icon>
+        <span class="text-[10px] text-[#FF8947]">Para agregar un comentario o imagen, inicia la tarea.</span>
+      </div>
+    </div>
+
+    <!-- Comentarios -->
+    <div class="mb-4" *ngIf="tarea?.estado !== 'Cerrada' && tarea?.estado !== 'Completada'">
+      <h3 class="text-gray-700 text-xs font-bold mb-1">Agrega un comentario <span class="text-[10px]">(Opcional)</span></h3>
+      <ion-textarea
+        [(ngModel)]="comentario"
+        placeholder="Escribe aquí..." 
+        rows="4"
+        [disabled]="tarea?.estado === 'Pendiente'"
+        class="w-full border rounded-lg text-sm"
+        fill="outline">
+      </ion-textarea>
+    </div>
+
+    <div class="mb-4" *ngIf="tarea?.estado === 'Completada'">
+      <h3 class="text-gray-700 text-xs font-bold mb-1">Comentario</h3>
+      <div class="p-2 bg-[#F2F5FB] rounded-lg flex">
+        <span class="text-[10px] font-normal text-[#878787]">{{comentario || 'Sin comentarios'}}</span>
+      </div>
+    </div>
+
+    <!-- Archivos adjuntos -->
+    <div class="mb-4" *ngIf="tarea?.estado !== 'Pendiente'">
+      <h3 class="text-gray-700 text-xs font-bold mb-2">Archivos adjuntos <span class="text-[10px]">(Opcional)</span></h3>
+      <div class="flex items-center gap-2 mb-2">
+        <ion-icon name="information-circle-outline" class="text-blue-500 text-sm"></ion-icon>
+        <span class="text-gray-600 text-[10px]">Puedes adjuntar hasta 5 imágenes ≤ 5MB</span>
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <div *ngFor="let archivo of archivosSubidos" 
+             class="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-300">
+          <img [src]="archivo.src" class="w-full h-full object-cover" alt="Archivo adjunto">
+          <button class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center"
+                  (click)="eliminarArchivo(archivo)">
+            <fa-icon [icon]="faXmark" class="text-[8px]"></fa-icon>
+          </button>
+        </div>
+        
+        <div *ngIf="tarea?.estado === 'En progreso' && archivosSubidos.length < 5"
+             class="flex items-center w-16 h-16 justify-center border-2 border-dashed border-gray-300 rounded-lg cursor-pointer"
+             (click)="subirArchivo()">
+          <ion-icon name="add-outline" class="text-gray-400 text-xl"></ion-icon>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex-grow"></div>
+  </div>
+</ion-content>
+
+<ion-footer>
+  <div class="p-4 bg-white">
+    <ion-button
+      expand="block"
+      [color]="colorBotonAccion"
+      (click)="ejecutarAccionPrincipal()">
+      {{ textoBotonAccion }}
+    </ion-button>
+  </div>
+</ion-footer>

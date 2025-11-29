@@ -1,1 +1,153 @@
-<p>creartarea works!</p>
+<ion-header>
+  <ion-toolbar>
+    <div class="flex justify-between items-center px-1 py-2">
+      <div class="flex items-center gap-3">
+        <ion-button fill="clear" size="small" (click)="goBack()">
+          <ion-icon name="chevron-back-outline" class="text-xl"></ion-icon>
+        </ion-button>
+      </div>
+      <span class="text-base font-medium">{{titulo}}</span>
+      <ion-button color="white" class="m-0"></ion-button>
+    </div>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="bg-gray-50">
+  <div class="p-4 space-y-3">
+    
+    <!-- Nombre de la tarea -->
+    <div class="space-y-1">
+      <label class="block text-xs text-gray-600 font-normal">Nombre de la tarea</label>
+      <ion-input
+        [(ngModel)]="nombreTarea"
+        placeholder="Ej. Revisar inventario"
+        fill="outline"
+        class="text-sm">
+      </ion-input>
+    </div>
+
+    <!-- Descripción de la tarea -->
+    <div class="space-y-1">
+      <label class="block text-xs text-gray-600 font-normal">Descripción de la tarea</label>
+      <ion-textarea
+        [(ngModel)]="descripcionTarea"
+        placeholder="Escribe aquí..."
+        rows="4"
+        fill="outline"
+        class="w-full text-xs">
+      </ion-textarea>
+    </div>
+    
+    <div class="flex gap-4">
+      <!-- Tipo de asignación -->
+      <div class="space-y-1 w-full">
+        <label class="block text-xs text-gray-600 font-normal">Tipo de asignación</label>
+        <ion-select
+          [(ngModel)]="tipoAsignacion"
+          placeholder="Asignar por cargo"
+          fill="outline"
+          interface="popover"
+          class="text-xs"
+          (ionChange)="onTipoAsignacionChange()">
+          <ion-select-option value="cargo">Asignar por cargo</ion-select-option>
+          <ion-select-option value="usuario">Asignar por usuario</ion-select-option>
+        </ion-select>
+      </div>
+
+      <div class="space-y-1 w-full">
+        <label class="block text-xs text-gray-600 font-normal">Cargo</label>
+        <div class="relative">
+          <div 
+            (click)="abrirModalCargo()"
+            class="flex items-center justify-between p-3 border border-gray-300 rounded-lg bg-white cursor-pointer min-h-[44px]">
+            <span class="text-xs">{{cargoSeleccionado}}</span>
+            <fa-icon [icon]="faCaretDown" class="text-sm"></fa-icon>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Usuario (solo cuando tipo asignación es usuario) -->
+    <div class="space-y-1" *ngIf="tipoAsignacion === 'usuario'">
+      <label class="block text-xs text-gray-600 font-normal">Usuario</label>
+      <div class="relative">
+        <div 
+          (click)="abrirModalUsuario()"
+          class="flex items-center justify-between p-3 border border-gray-300 rounded-lg bg-white cursor-pointer min-h-[44px]">
+          <span class="text-sm">{{usuario}}</span>
+          <fa-icon [icon]="faCaretDown" class="text-sm"></fa-icon>
+        </div>
+      </div>
+    </div>
+
+    <!-- Subcategoría -->
+    <div class="space-y-1">
+      <label class="block text-xs text-gray-600 font-normal">Subcategoría</label>
+      <ion-select
+        [(ngModel)]="subcategoria"
+        placeholder="Seleccionar"
+        fill="outline"
+        interface="popover"
+        class="text-xs">
+        <ion-select-option value="operaciones">Operaciones</ion-select-option>
+        <ion-select-option value="limpieza">Limpieza</ion-select-option>
+        <ion-select-option value="inventario">Inventario</ion-select-option>
+        <ion-select-option value="atencion">Atención al cliente</ion-select-option>
+        <ion-select-option value="cocina">Cocina</ion-select-option>
+      </ion-select>
+    </div>
+
+    <!-- Fila de Orden y Prioridad -->
+    <div class="grid grid-cols-2 gap-4">
+      <!-- Orden -->
+      <div class="space-y-1">
+        <label class="block text-xs text-gray-600 font-normal">Orden</label>
+        <div class="relative">
+          <div 
+            (click)="abrirModalOrden()"
+            class="flex items-center justify-between p-3 border border-gray-300 rounded-lg bg-white cursor-pointer min-h-[44px]">
+            <span class="text-xs text-gray-900">{{orden}}</span>
+            <ion-icon name="chevron-down-outline" class="text-gray-400 text-sm"></ion-icon>
+          </div>
+        </div>
+      </div>
+
+      <!-- Prioridad -->
+      <div class="space-y-1">
+        <label class="block text-xs text-gray-600 font-normal">Prioridad</label>
+        <ion-select
+          [(ngModel)]="prioridad"
+          placeholder="Alta"
+          fill="outline"
+          interface="popover"
+          class="text-xs">
+          <ion-select-option value="alta">Alta</ion-select-option>
+          <ion-select-option value="media">Media</ion-select-option>
+          <ion-select-option value="baja">Baja</ion-select-option>
+        </ion-select>
+      </div>
+    </div>
+
+    <!-- Estado -->
+    <div class="space-y-1">
+      <label class="block text-xs text-gray-600 font-normal">Estado</label>
+      <div class="flex items-center gap-3">
+        <ion-toggle mode="ios"
+          [(ngModel)]="estadoActivo"
+          color="primary">
+        </ion-toggle>
+        <span class="text-sm text-gray-700">Activo</span>
+      </div>
+    </div>
+  </div>
+</ion-content>
+
+<ion-footer class="w-full p-4 bg-white">
+  <ion-button
+    expand="block"
+    color="primary"
+    size="large"
+    (click)="crearTarea()">
+    {{modoEdicion ? 'Actualizar tarea' : 'Agregar tarea'}}
+  </ion-button>
+</ion-footer>

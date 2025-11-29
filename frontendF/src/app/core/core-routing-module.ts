@@ -4,8 +4,8 @@ import { Login } from './login/login';
 import { NoAuthGuard } from './guards/no-auth.guard';
 
 const routes: Routes = [
-   {
-    path: 'login',
+  {
+    path: '',
     component: Login,
     canActivate: [NoAuthGuard]
   }

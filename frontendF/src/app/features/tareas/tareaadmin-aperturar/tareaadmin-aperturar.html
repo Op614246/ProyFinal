@@ -1,1 +1,151 @@
-<p>tareaadmin-aperturar works!</p>
+<ion-header>
+  <ion-toolbar>
+    <div class="flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <ion-button fill="clear" size="small" (click)="goBack()">
+          <ion-icon name="chevron-back-outline" class="text-xl"></ion-icon>
+        </ion-button>
+      </div>
+      <span class="text-base font-medium text-[#000000]">Tarea</span>
+      <ion-button color="white" class="m-0 sinsombra"></ion-button>
+    </div>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <!-- Tarjeta de tarea -->
+  <div class="m-4">
+    <div class="p-4 bg-[#FFF9E7] rounded-lg border-l-4 border-yellow-500">
+      <div class="flex items-center gap-2">
+        <p class="text-gray-800 text-xs font-medium">
+          {{tareaSeleccionada?.titulo || 'Sin título'}}
+        </p>
+        <div class="px-3 py-1 rounded-full flex items-center gap-1 ml-auto"
+             [ngClass]="{
+               'bg-yellow-500': tareaSeleccionada?.estado === 'Pendiente',
+               'bg-blue-500': tareaSeleccionada?.estado === 'En progreso',
+               'bg-green-500': tareaSeleccionada?.estado === 'Finalizada' || tareaSeleccionada?.estado === 'Completada'
+             }">
+          <span class="text-white text-xs font-medium">{{tareaSeleccionada?.estado || 'Pendiente'}}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Descripción -->
+  <div class="px-4 mb-2">
+    <h2 class="text-[#636E95] text-xs font-bold mb-1">Descripción</h2>
+    <p class="text-[#000000] font-normal text-[10px] leading-relaxed">
+      {{tareaSeleccionada?.descripcion || tareaSeleccionada?.titulo || 'Sin descripción disponible'}}
+    </p>
+  </div>
+
+  <!-- Información detallada de la tarea -->
+  <div class="px-4 mb-4">
+    <!-- Responsable -->
+    <div class="flex items-center gap-2 mb-2">
+      <ion-icon name="person-outline" class="text-gray-500 text-[10px]"></ion-icon>
+      <span class="text-gray-600 text-[10px]">Responsable: {{tareaSeleccionada?.responsable || 'Sin asignar'}}</span>
+    </div>
+
+    <!-- Categoría y Estados -->
+    <div class="grid grid-cols-2 gap-4 mb-2">
+      <div class="flex items-center gap-2">
+        <ion-icon name="layers-outline" class="text-gray-500 text-[10px]"></ion-icon>
+        <span class="text-gray-600 text-[10px]">Categoría: {{tareaSeleccionada?.categoria || 'General'}}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <ion-icon name="checkmark-circle-outline" class="text-gray-500 text-[10px]"></ion-icon>
+        <span class="text-gray-600 text-[10px]">Estado: {{tareaSeleccionada?.estadoDetalle || 'Activo'}}</span>
+      </div>
+    </div>
+
+    <!-- Horarios -->
+    <div class="flex flex-row gap-2 mb-2">
+      <div class="flex items-center gap-2">
+        <ion-icon name="time-outline" class="text-gray-500 text-[10px]"></ion-icon>
+        <span class="text-gray-600 text-[10px]">Hora programada: {{tareaSeleccionada?.horaprogramada || '--:--'}}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <ion-icon name="time-outline" class="text-gray-500 text-[10px]"></ion-icon>
+        <span class="text-gray-600 text-[10px]">Inicio: {{tareaSeleccionada?.horainicio || '--:--'}}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <ion-icon name="time-outline" class="text-gray-500 text-[10px]"></ion-icon>
+        <span class="text-gray-600 text-[10px]">Fin: {{tareaSeleccionada?.horafin || '--:--'}}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Aviso para tareas pendientes -->
+  <div class="w-full px-4 mb-2" *ngIf="tareaSeleccionada?.estado === 'Pendiente'">
+    <div class="p-[4px] bg-[#FFF3EC] rounded flex flex-row items-center gap-2">
+      <ion-icon name="information-circle-outline" class="text-orange-400 text-[10px]"></ion-icon>
+      <span class="text-[10px] text-[#FF8947]">Para agregar un comentario o imagen, inicia la tarea.</span>
+    </div>
+  </div>
+
+  <!-- Sección de comentarios -->
+  <div class="px-4 mb-6">
+    <h3 class="text-gray-900 font-medium text-xs mb-1">Agrega un comentario (Opcional)</h3>
+    
+    <!-- Área de texto para comentario -->
+    <div class="bg-gray-100 rounded-lg p-4 mb-4 text-[10px]" *ngIf="tareaSeleccionada?.estado !== 'Completada'">
+      <ion-textarea
+        placeholder="Ejm: Comentario sobre la tarea..."
+        [(ngModel)]="comentario"
+        [disabled]="tareaSeleccionada?.estado === 'Pendiente'"
+        rows="4"
+        class="w-full"
+        fill="clear">
+      </ion-textarea>
+    </div>
+    
+    <!-- Comentario existente para tareas completadas -->
+    <div class="flex p-2 bg-[#F2F5FB] rounded-lg" *ngIf="tareaSeleccionada?.estado === 'Completada'">
+      <span class="text-xxs font-normal text-[#363636]">{{comentario || 'Sin comentarios registrados.'}}</span>
+    </div>
+  </div>
+
+  <!-- Sección de archivos adjuntos -->
+  <div class="px-4 mb-6">
+    <h3 class="text-gray-900 font-medium text-xs mb-1">Archivos adjuntos (Opcional)</h3>
+    
+    <!-- Información sobre archivos -->
+    <div class="flex items-center gap-2 mb-4">
+      <ion-icon name="information-circle-outline" class="text-blue-500 text-sm"></ion-icon>
+      <span class="text-gray-600 text-[10px]">Puedes adjuntar más de una imagen ≤ 5MB como evidencia.</span>
+    </div>
+
+    <!-- Área de archivos adjuntos -->
+    <div class="flex flex-wrap gap-2">
+      <!-- Archivos existentes -->
+      <div *ngFor="let archivo of archivosAdjuntos; let i = index" 
+           class="relative w-[80px] h-20 rounded-lg overflow-hidden border border-gray-300">
+        <img [src]="archivo.url" class="w-full h-full object-cover" alt="Archivo adjunto">
+        <button class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center"
+                (click)="eliminarArchivo(i)">
+          <ion-icon name="close-outline" class="text-xs"></ion-icon>
+        </button>
+      </div>
+      
+      <!-- Botón para agregar archivo -->
+      <div class="flex items-center w-[80px] justify-center h-20 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer"
+           (click)="agregarArchivo()"
+           *ngIf="tareaSeleccionada?.estado !== 'Completada' && tareaSeleccionada?.estado !== 'Pendiente'">
+        <ion-icon name="add-outline" class="text-gray-400 text-2xl"></ion-icon>
+      </div>
+    </div>
+  </div>
+</ion-content>
+
+<ion-footer>
+  <div class="p-4 bg-white">
+    <ion-button
+      expand="block"
+      [color]="colorBotonAccion"
+      (click)="abrirModalReapertura()">
+      {{ textoBotonAccion }}
+    </ion-button>
+  </div>
+</ion-footer>
