@@ -12,7 +12,7 @@ const routes: Routes = [
     component: Tareas
   },
   {
-    path: 'tarea-info',
+    path: 'tareas-info',
     component: TareasInfo
   },
   {

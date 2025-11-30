@@ -420,7 +420,24 @@ export class Tareas implements OnInit, OnDestroy {
   async asignarTareasSeleccionadas(): Promise<void> {
     if (this.tareasSeleccionadas.size === 0) return;
 
-    const tareasIds = Array.from(this.tareasSeleccionadas);
+    // Validar que solo se puedan asignar tareas de hoy
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const hoyStr = this.formatearFechaISO(hoy);
+    
+    // Filtrar solo tareas de hoy
+    const tareasValidas = this.tareasSinAsignar.filter(t => {
+      return this.tareasSeleccionadas.has(t.id) && t.fechaAsignacion === hoyStr;
+    });
+    
+    if (tareasValidas.length === 0) {
+      this.toastService.error('Solo puedes auto-asignarte tareas del día de hoy');
+      this.tareasSeleccionadas.clear();
+      this.cdr.markForCheck();
+      return;
+    }
+
+    const tareasIds = tareasValidas.map(t => t.id);
     let exitos = 0;
 
     for (const tareaId of tareasIds) {
@@ -444,6 +461,17 @@ export class Tareas implements OnInit, OnDestroy {
   // Iniciar tarea (cambiar a En progreso) con confirmación
   async iniciarTarea(tarea: TareaAdmin, event?: Event): Promise<void> {
     if (event) event.stopPropagation();
+
+    // Validar que no se pueda iniciar tareas de días anteriores
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const fechaTarea = new Date(tarea.fechaAsignacion + 'T00:00:00');
+    fechaTarea.setHours(0, 0, 0, 0);
+    
+    if (fechaTarea < hoy) {
+      this.toastService.error('No puedes iniciar tareas de días anteriores');
+      return;
+    }
 
     const alert = await this.alertController.create({
       header: 'Iniciar Tarea',
@@ -756,12 +784,15 @@ export class Tareas implements OnInit, OnDestroy {
       });
   }
 
-  // Ver información de tarea (sin importar estado)
-  irAInfoTarea(tarea: TareaAdmin, event?: Event): void {
+  // Ver información de tarea (sin importar estado) - navega a tareas-info
+  async irAInfoTarea(tarea: TareaAdmin, event?: Event): Promise<void> {
     if (event) {
       event.stopPropagation();
     }
-    this.router.navigate(['/features/tareas/info'], { 
+    // Guardar la tarea seleccionada en el servicio para acceso posterior
+    this.tareasService.seleccionarTareaAdmin(tarea);
+    // Navegar a la vista de detalle de tarea con subtareas
+    this.router.navigate(['/features/tareas/tareas-info'], {
       queryParams: { tareaId: tarea.id }
     });
   }

@@ -670,6 +670,25 @@ export class TareasService {
     const tareas = this.tareasAdminSubject.value;
     return tareas.find(t => t.id === id) || null;
   }
+
+  /**
+   * Tarea admin seleccionada para ver detalle
+   */
+  private tareaAdminSeleccionada: TareaAdmin | null = null;
+
+  /**
+   * Guardar la tarea admin seleccionada
+   */
+  seleccionarTareaAdmin(tarea: TareaAdmin): void {
+    this.tareaAdminSeleccionada = tarea;
+  }
+
+  /**
+   * Obtener la tarea admin seleccionada
+   */
+  obtenerTareaAdminSeleccionada(): TareaAdmin | null {
+    return this.tareaAdminSeleccionada;
+  }
   
   /**
    * Completar subtarea de una tarea admin
@@ -714,5 +733,46 @@ export class TareasService {
    */
   notificarActualizacion(): void {
     this.actualizacionSubject.next();
+  }
+
+  // ============================================
+  // MÉTODOS DE SUBTAREAS
+  // ============================================
+
+  /**
+   * Obtener subtareas de una tarea
+   */
+  obtenerSubtareas(taskId: string): Observable<ApiResponse<any[]>> {
+    return this.http.get<ApiResponse<any[]>>(`${environment.apiUrl}/subtareas/task/${taskId}`);
+  }
+
+  /**
+   * Crear nueva subtarea
+   */
+  crearSubtarea(taskId: string, data: any): Observable<ApiResponse<any>> {
+    return this.http.post<ApiResponse<any>>(`${environment.apiUrl}/subtareas`, {
+      ...data,
+      task_id: taskId
+    }).pipe(
+      tap(() => this.notificarActualizacion())
+    );
+  }
+
+  /**
+   * Actualizar subtarea
+   */
+  actualizarSubtarea(subtareaId: string, data: any): Observable<ApiResponse<any>> {
+    return this.http.put<ApiResponse<any>>(`${environment.apiUrl}/subtareas/${subtareaId}`, data).pipe(
+      tap(() => this.notificarActualizacion())
+    );
+  }
+
+  /**
+   * Eliminar subtarea
+   */
+  eliminarSubtarea(subtareaId: string): Observable<ApiResponse<any>> {
+    return this.http.delete<ApiResponse<any>>(`${environment.apiUrl}/subtareas/${subtareaId}`).pipe(
+      tap(() => this.notificarActualizacion())
+    );
   }
 }

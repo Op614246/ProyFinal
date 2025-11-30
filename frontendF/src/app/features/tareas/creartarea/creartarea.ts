@@ -44,6 +44,7 @@ export class Creartarea implements OnInit {
   fechaLimite: string = '';
   horaInicio: string = '';
   horaFin: string = '';
+  minFechaAsignacion: string = new Date().toISOString().split('T')[0]; // Mínimo = hoy
   
   // Modo edición
   modoEdicion: boolean = false;

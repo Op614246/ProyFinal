@@ -141,6 +141,73 @@ class SubtareaController {
     }
     
     /**
+     * Crear nueva subtarea (task_id viene en el body)
+     * POST /subtareas
+     */
+    public function crearSubtareaGeneral() {
+        try {
+            $body = json_decode($this->app->request()->getBody(), true);
+            
+            if (empty($body['task_id'])) {
+                return $this->sendResponse([
+                    'tipo' => 2,
+                    'mensajes' => ['El task_id es requerido'],
+                    'data' => null
+                ], 400);
+            }
+            
+            if (empty($body['titulo'])) {
+                return $this->sendResponse([
+                    'tipo' => 2,
+                    'mensajes' => ['El título es requerido'],
+                    'data' => null
+                ], 400);
+            }
+            
+            $taskId = $body['task_id'];
+            
+            $data = [
+                'task_id' => $taskId,
+                'titulo' => trim($body['titulo']),
+                'descripcion' => $body['descripcion'] ?? null,
+                'estado' => $body['estado'] ?? 'Pendiente',
+                'prioridad' => $body['prioridad'] ?? 'Media',
+                'fechaAsignacion' => $body['fechaAsignacion'] ?? date('Y-m-d'),
+                'fechaVencimiento' => $body['fechaVencimiento'] ?? null,
+                'horainicio' => $body['horainicio'] ?? null,
+                'horafin' => $body['horafin'] ?? null,
+                'categoria_id' => $body['categoria_id'] ?? null,
+                'usuarioasignado_id' => $body['usuarioasignado_id'] ?? $body['usuario_asignado_id'] ?? null
+            ];
+            
+            $subtareaId = $this->repository->crearSubtarea($data);
+            $subtarea = $this->repository->getSubtareaById($subtareaId);
+            
+            Logger::info('Subtarea creada (general)', [
+                'subtarea_id' => $subtareaId,
+                'task_id' => $taskId,
+                'usuario' => $this->app->user['data']['username'] ?? 'unknown'
+            ]);
+            
+            $this->sendResponse([
+                'tipo' => 1,
+                'mensajes' => ['Subtarea creada correctamente'],
+                'data' => $subtarea
+            ], 201);
+            
+        } catch (Exception $e) {
+            Logger::error('Error al crear subtarea general', [
+                'error' => $e->getMessage()
+            ]);
+            $this->sendResponse([
+                'tipo' => 3,
+                'mensajes' => ['Error al crear subtarea: ' . $e->getMessage()],
+                'data' => null
+            ], 500);
+        }
+    }
+    
+    /**
      * Actualizar subtarea
      * PUT /subtareas/:id
      */

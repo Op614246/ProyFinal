@@ -151,7 +151,8 @@
   </div>
 </ion-content>
 
-<ion-footer>
+<!-- Footer con botón de acción - ocultar si es tarea completada y no es admin -->
+<ion-footer *ngIf="!(tarea?.estado === 'Completada' && !isAdmin)">
   <div class="p-4 bg-white">
     <ion-button
       expand="block"

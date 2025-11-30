@@ -39,6 +39,16 @@ $app->get('/mis-subtareas', function() use ($controller) {
     $controller->getMisSubtareas();
 });
 
+// Obtener subtareas de una tarea específica
+$app->get('/task/:taskId', function($taskId) use ($controller) {
+    $controller->getSubtareasByTask($taskId);
+});
+
+// Crear nueva subtarea
+$app->post('/', function() use ($controller) {
+    $controller->crearSubtareaGeneral();
+});
+
 // ===============================
 // RUTAS CON PARÁMETROS
 // ===============================

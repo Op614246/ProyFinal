@@ -1,12 +1,15 @@
 import { Location } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { faFlag, faSliders } from '@fortawesome/pro-regular-svg-icons';
+import { faFlag, faSliders, faPlus } from '@fortawesome/pro-regular-svg-icons';
 import { ModalController, ToastController } from '@ionic/angular';
 import { ModalForm } from '../modal-form/modal-form';
 import { ModalFiltros } from '../pages/modal-filtros/modal-filtros';
 import { ModalFiltrosAdmin } from '../pages/modal-filtros-admin/modal-filtros-admin';
+import { ModalCrearSubtarea } from '../pages/modal-crear-subtarea/modal-crear-subtarea';
+import { SubtareaInfo } from '../pages/subtarea-info/subtarea-info';
 import { Tarea, TareaAdmin, TareasService } from '../service/tareas.service';
+import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
   selector: 'app-tareas-info',
@@ -21,10 +24,12 @@ export class TareasInfo implements OnInit {
   // Variables de estado
   searchTerm: string = '';
   cargandoEmpleados: boolean = true;
+  isAdmin: boolean = false;
   
   // Iconos FontAwesome
   public faSliders = faSliders;
   public faFlag = faFlag;
+  public faPlus = faPlus;
 
   // Getter para acceder a apartadoadmin del servicio
   get isApartadoAdmin(): boolean {
@@ -42,8 +47,12 @@ export class TareasInfo implements OnInit {
     private modalController: ModalController,
     private toastController: ToastController,
     private route: ActivatedRoute,
-    private router: Router
-  ) {}
+    private router: Router,
+    private authService: AuthService
+  ) {
+    const user = this.authService.getCurrentUser();
+    this.isAdmin = user?.role === 'admin';
+  }
 
   ngOnInit() {
     this.obtenerParametrosTarea();
@@ -53,12 +62,18 @@ export class TareasInfo implements OnInit {
   obtenerParametrosTarea() {
     this.route.queryParams.subscribe(params => {
       if (params['tareaId']) {
-        const tareaLocal = this.tareasService.obtenerTareaAdminPorIdLocal(params['tareaId']);
-        if (tareaLocal) {
-          this.tareaAdminSeleccionada = tareaLocal;
-          if (this.tareaAdminSeleccionada && this.tareaAdminSeleccionada.Tarea) {
-            this.subtareas = this.tareaAdminSeleccionada.Tarea;
-          }
+        // Primero intentar obtener del servicio (tarea recién seleccionada)
+        let tarea = this.tareasService.obtenerTareaAdminSeleccionada();
+        
+        // Si no está en el servicio, buscar en el cache por ID
+        if (!tarea || tarea.id !== params['tareaId']) {
+          tarea = this.tareasService.obtenerTareaAdminPorIdLocal(params['tareaId']);
+        }
+        
+        if (tarea) {
+          this.tareaAdminSeleccionada = tarea;
+          // Cargar subtareas del backend
+          this.cargarSubtareas();
         }
       }
     });
@@ -114,25 +129,26 @@ export class TareasInfo implements OnInit {
     }
   }
 
-  // Método para navegar a subtarea individual
-  navegarASubtarea(subtarea: Tarea) {
-    this.router.navigate(['/tareas/subtarea-info'], {
-      queryParams: {
-        tareaId: subtarea.id,
-        titulo: subtarea.titulo,
-        estado: subtarea.estado,
-        categoria: subtarea.Categoria,
-        horainicio: subtarea.horainicio,
-        horafin: subtarea.horafin,
-        descripcion: subtarea.descripcion,
-        prioridad: subtarea.Prioridad,
-        completada: subtarea.completada,
-        progreso: subtarea.progreso,
-        fechaAsignacion: subtarea.fechaAsignacion,
-        fromTab: 'tareas-admin',
-        tareaAdminId: this.tareaAdminSeleccionada?.id
+  // Método para abrir modal de subtarea individual
+  async navegarASubtarea(subtarea: Tarea) {
+    const modal = await this.modalController.create({
+      component: SubtareaInfo,
+      componentProps: {
+        tarea: subtarea,
+        tareaadmin: this.tareaAdminSeleccionada
+      },
+      breakpoints: [0, 0.75, 1],
+      initialBreakpoint: 0.75
+    });
+
+    modal.onDidDismiss().then((result) => {
+      if (result.role === 'confirm' || result.data?.actualizada) {
+        // Recargar subtareas si hubo cambios
+        this.cargarSubtareas();
       }
     });
+
+    await modal.present();
   }
 
   navegarACrearTarea() {
@@ -241,6 +257,116 @@ export class TareasInfo implements OnInit {
         horafin: subtarea.horafin
       }
     });
+  }
+
+  // Eliminar tarea (solo admin)
+  async eliminarTarea() {
+    if (!this.tareaAdminSeleccionada) {
+      this.mostrarToast('No hay tarea seleccionada', 'danger');
+      return;
+    }
+
+    // Confirmar eliminación
+    const confirmado = confirm('¿Estás seguro de que deseas eliminar esta tarea?');
+    if (!confirmado) return;
+
+    this.tareasService.eliminarTareaAdmin(this.tareaAdminSeleccionada.id).subscribe({
+      next: (response) => {
+        if (response.tipo === 1) {
+          this.mostrarToast('Tarea eliminada correctamente', 'success');
+          this.goBack();
+        } else {
+          this.mostrarToast(response.mensajes?.[0] || 'Error al eliminar tarea', 'danger');
+        }
+      },
+      error: (err) => {
+        console.error('Error eliminando tarea:', err);
+        this.mostrarToast('Error al eliminar tarea', 'danger');
+      }
+    });
+  }
+
+  // Abrir modal para crear nueva subtarea
+  async abrirModalCrearSubtarea() {
+    if (!this.tareaAdminSeleccionada) {
+      this.mostrarToast('No hay tarea seleccionada', 'danger');
+      return;
+    }
+
+    const modal = await this.modalController.create({
+      component: ModalCrearSubtarea,
+      breakpoints: [0, 0.75, 0.9, 1],
+      initialBreakpoint: 0.9,
+      componentProps: {
+        taskId: this.tareaAdminSeleccionada.id,
+        taskTitulo: this.tareaAdminSeleccionada.titulo
+      }
+    });
+
+    await modal.present();
+
+    const { data, role } = await modal.onWillDismiss();
+    
+    if (role === 'confirm' && data?.created) {
+      // Recargar subtareas
+      this.cargarSubtareas();
+      this.mostrarToast('Subtarea creada correctamente', 'success');
+    }
+  }
+
+  // Cargar subtareas desde el backend
+  cargarSubtareas() {
+    if (!this.tareaAdminSeleccionada) return;
+    
+    this.tareasService.obtenerSubtareas(this.tareaAdminSeleccionada.id).subscribe({
+      next: (response) => {
+        if (response.tipo === 1 && response.data) {
+          this.subtareas = response.data.map((s: any) => ({
+            id: s.id,
+            titulo: s.titulo || s.title,
+            descripcion: s.descripcion || s.description || '',
+            estado: s.estado || 'Pendiente',
+            Categoria: s.categoria || s.Categoria || '',
+            Prioridad: this.mapPrioridad(s.prioridad || s.priority),
+            prioridad: this.mapPrioridad(s.prioridad || s.priority),
+            horainicio: s.horainicio || s.hora_inicio || '',
+            horafin: s.horafin || s.hora_fin || '',
+            horaprogramada: s.horaprogramada || '',
+            fechaAsignacion: s.fecha_asignacion || s.fechaAsignacion || '',
+            usuarioasignado: s.usuarioasignado || s.usuario_asignado || '',
+            usuarioasignado_id: s.usuarioasignado_id || s.assigned_user_id || 0,
+            completada: s.completada || s.estado === 'Completada',
+            progreso: s.progreso || 0,
+            estadodetarea: s.estadodetarea || 'Activo',
+            totalSubtareas: 0,
+            subtareasCompletadas: 0
+          }));
+          
+          // Actualizar contadores en la tarea admin
+          if (this.tareaAdminSeleccionada) {
+            this.tareaAdminSeleccionada.totalSubtareas = this.subtareas.length;
+            this.tareaAdminSeleccionada.subtareasCompletadas = this.subtareas.filter(s => s.completada).length;
+          }
+        }
+      },
+      error: (err) => {
+        console.error('Error cargando subtareas:', err);
+      }
+    });
+  }
+
+  // Mapear prioridad del backend al formato del frontend
+  private mapPrioridad(prioridad: string): 'Alta' | 'Media' | 'Baja' {
+    switch (prioridad?.toLowerCase()) {
+      case 'high':
+      case 'alta':
+        return 'Alta';
+      case 'low':
+      case 'baja':
+        return 'Baja';
+      default:
+        return 'Media';
+    }
   }
 
   private aplicarFiltros(filtros: any) {

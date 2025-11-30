@@ -1,0 +1,89 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title class="text-base font-medium">Nueva Subtarea</ion-title>
+    <ion-buttons slot="end">
+      <ion-button fill="clear" (click)="cerrar()">
+        <fa-icon [icon]="faXmark" class="text-gray-500"></fa-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <div class="space-y-4">
+    
+    <!-- Info de la tarea cabecera -->
+    <div class="p-3 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+      <p class="text-[10px] text-gray-500">Creando subtarea para:</p>
+      <p class="text-sm font-semibold text-gray-800">{{ taskTitulo }}</p>
+    </div>
+
+    <!-- Título -->
+    <div class="space-y-1">
+      <label class="block text-xs text-gray-600 font-medium">Título de la subtarea *</label>
+      <ion-input
+        [(ngModel)]="titulo"
+        placeholder="Ej. Verificar inventario de productos"
+        fill="outline"
+        class="text-sm">
+      </ion-input>
+    </div>
+
+    <!-- Descripción -->
+    <div class="space-y-1">
+      <label class="block text-xs text-gray-600 font-medium">Descripción (opcional)</label>
+      <ion-textarea
+        [(ngModel)]="descripcion"
+        placeholder="Describe los detalles de la subtarea..."
+        rows="3"
+        fill="outline"
+        class="text-sm">
+      </ion-textarea>
+    </div>
+
+    <!-- Prioridad -->
+    <div class="space-y-1">
+      <label class="block text-xs text-gray-600 font-medium">Prioridad</label>
+      <ion-select
+        [(ngModel)]="prioridad"
+        placeholder="Seleccionar prioridad"
+        fill="outline"
+        interface="popover"
+        class="text-sm">
+        <ion-select-option value="high">Alta</ion-select-option>
+        <ion-select-option value="medium">Media</ion-select-option>
+        <ion-select-option value="low">Baja</ion-select-option>
+      </ion-select>
+    </div>
+
+    <!-- Usuario asignado (opcional) -->
+    <div class="space-y-1">
+      <label class="block text-xs text-gray-600 font-medium">Asignar a usuario (opcional)</label>
+      <ion-select
+        [(ngModel)]="usuarioAsignadoId"
+        placeholder="Sin asignar"
+        fill="outline"
+        interface="popover"
+        class="text-sm"
+        [disabled]="cargandoUsuarios">
+        <ion-select-option [value]="null">Sin asignar</ion-select-option>
+        <ion-select-option *ngFor="let usuario of usuarios" [value]="usuario.id">
+          {{ usuario.nombre_completo || usuario.username }}
+        </ion-select-option>
+      </ion-select>
+      <p *ngIf="cargandoUsuarios" class="text-[10px] text-gray-400">Cargando usuarios...</p>
+    </div>
+
+  </div>
+</ion-content>
+
+<ion-footer class="p-4 bg-white">
+  <div class="flex gap-3">
+    <ion-button expand="block" fill="outline" color="medium" class="flex-1" (click)="cerrar()">
+      Cancelar
+    </ion-button>
+    <ion-button expand="block" color="primary" class="flex-1" (click)="crearSubtarea()">
+      Crear Subtarea
+    </ion-button>
+  </div>
+</ion-footer>

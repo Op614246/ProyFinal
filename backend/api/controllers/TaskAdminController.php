@@ -23,6 +23,9 @@ class TaskAdminController {
      */
     public function getAllTareasAdmin() {
         try {
+            // Inactivar tareas vencidas automáticamente (tareas con deadline pasado sin completar)
+            $this->repository->inactivarTareasVencidas();
+            
             // Obtener filtros de query params
             $request = $this->app->request();
             $fecha = $request->get('fecha');
@@ -207,6 +210,16 @@ class TaskAdminController {
             if (!$this->repository->puedeSerAsignada($tareaId)) {
                 return $this->sendResponse(['tipo' => 2, 'mensajes' => ['Esta tarea no está disponible para asignación'], 'data' => null], 400);
             }
+            
+            // Validar que solo se pueden asignar tareas del día actual
+            $tarea = $this->repository->getTareaAdminPorId($tareaId);
+            if ($tarea) {
+                $fechaTarea = $tarea['fechaAsignacion'];
+                $hoy = date('Y-m-d');
+                if ($fechaTarea < $hoy) {
+                    return $this->sendResponse(['tipo' => 2, 'mensajes' => ['Solo puedes auto-asignarte tareas del día de hoy'], 'data' => null], 400);
+                }
+            }
 
             $this->repository->asignarTarea($tareaId, $userId);
             
@@ -230,6 +243,16 @@ class TaskAdminController {
      */
     public function iniciarTarea($tareaId) {
         try {
+            // Validar que no se puede iniciar tareas de días anteriores
+            $tarea = $this->repository->getTareaAdminPorId($tareaId);
+            if ($tarea) {
+                $fechaTarea = $tarea['fechaAsignacion'];
+                $hoy = date('Y-m-d');
+                if ($fechaTarea < $hoy) {
+                    return $this->sendResponse(['tipo' => 2, 'mensajes' => ['No puedes iniciar tareas de días anteriores'], 'data' => null], 400);
+                }
+            }
+            
             $this->repository->iniciarTarea($tareaId);
             $tarea = $this->repository->getTareaAdminPorId($tareaId);
             

@@ -5,6 +5,7 @@ import { faFlag, faXmark } from '@fortawesome/pro-regular-svg-icons';
 import { ActionSheetController, AlertController, ModalController, ToastController, NavParams } from '@ionic/angular';
 import { ModalForm } from '../../modal-form/modal-form';
 import { Tarea, TareaAdmin, TareasService } from '../../service/tareas.service';
+import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
   selector: 'app-subtarea-info',
@@ -24,6 +25,9 @@ export class SubtareaInfo implements OnInit {
   // Flag para detectar si está en modo modal
   esModal: boolean = false;
   
+  // Flag para verificar si es admin
+  isAdmin: boolean = false;
+  
   public faFlag = faFlag;
   public faXmark = faXmark;
 
@@ -39,8 +43,13 @@ export class SubtareaInfo implements OnInit {
     private modalController: ModalController,
     private actionSheetController: ActionSheetController,
     private toastController: ToastController,
-    public tareasService: TareasService
-  ) { }
+    public tareasService: TareasService,
+    private authService: AuthService
+  ) {
+    // Verificar si el usuario es admin
+    const user = this.authService.getCurrentUser();
+    this.isAdmin = user?.role === 'admin';
+  }
 
   ngOnInit() {
     // Detectar si está en modo modal (si recibió tarea directamente como Input)
@@ -267,7 +276,7 @@ export class SubtareaInfo implements OnInit {
     switch (this.tarea.estado) {
       case 'Pendiente': return 'Iniciar tarea';
       case 'En progreso': return 'Finalizar tarea';
-      case 'Completada': return 'Reaperturar tarea';
+      case 'Completada': return this.isAdmin ? 'Reaperturar tarea' : '';
       default: return 'Iniciar tarea';
     }
   }
@@ -292,7 +301,10 @@ export class SubtareaInfo implements OnInit {
         this.finalizarTarea();
         break;
       case 'Completada':
-        this.abrirModalReaperturar();
+        // Solo admin puede reaperturar
+        if (this.isAdmin) {
+          this.abrirModalReaperturar();
+        }
         break;
     }
   }

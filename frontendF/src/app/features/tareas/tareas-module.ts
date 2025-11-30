@@ -15,6 +15,7 @@ import { ModalFiltrosAdmin } from './pages/modal-filtros-admin/modal-filtros-adm
 import { ModalReaperturar } from './pages/modal-reaperturar/modal-reaperturar';
 import { ModalCompletar } from './pages/modal-completar/modal-completar';
 import { SubtareaInfo } from './pages/subtarea-info/subtarea-info';
+import { ModalCrearSubtarea } from './pages/modal-crear-subtarea/modal-crear-subtarea';
 
 @NgModule({
   declarations: [
@@ -27,7 +28,8 @@ import { SubtareaInfo } from './pages/subtarea-info/subtarea-info';
     ModalFiltrosAdmin,
     ModalReaperturar,
     ModalCompletar,
-    SubtareaInfo
+    SubtareaInfo,
+    ModalCrearSubtarea
   ],
   imports: [
     CommonModule,

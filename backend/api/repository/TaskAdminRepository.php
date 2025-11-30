@@ -632,4 +632,25 @@ class TaskAdminRepository {
         $stmt = $this->db->prepare($sql);
         return $stmt->execute();
     }
+    
+    /**
+     * Inactivar tareas vencidas automáticamente
+     * Las tareas que no se completaron hasta el día después de la fecha_asignacion se inactivan
+     * También tareas con deadline vencido
+     */
+    public function inactivarTareasVencidas() {
+        // Inactivar tareas pendientes/en progreso cuya fecha de asignación + 1 día ya pasó
+        // Es decir, si la tarea era para el 30/11, tiene hasta el 01/12 para completarla
+        $sql = "
+            UPDATE tasks 
+            SET status = 'inactive', updated_at = NOW() 
+            WHERE status IN ('pending', 'in_process') 
+            AND (
+                DATE_ADD(fecha_asignacion, INTERVAL 1 DAY) < CURDATE()
+                OR (deadline IS NOT NULL AND DATE_ADD(deadline, INTERVAL 1 DAY) < CURDATE())
+            )
+        ";
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute();
+    }
 }
