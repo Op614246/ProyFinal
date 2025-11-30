@@ -182,6 +182,12 @@ class JwtMiddleware extends \Slim\Middleware
     private function unauthorized($app, $message)
     {
         $response = $app->response();
+        
+        // Agregar headers CORS para que el navegador pueda leer la respuesta
+        $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '*';
+        $response->header('Access-Control-Allow-Origin', $origin);
+        $response->header('Access-Control-Allow-Credentials', 'true');
+        
         $response->header('Content-Type', 'application/json');
         $response->status(401);
         $response->body(json_encode([

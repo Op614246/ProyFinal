@@ -13,6 +13,7 @@ import { ModalForm } from './modal-form/modal-form';
 import { ModalFiltros } from './pages/modal-filtros/modal-filtros';
 import { ModalFiltrosAdmin } from './pages/modal-filtros-admin/modal-filtros-admin';
 import { ModalReaperturar } from './pages/modal-reaperturar/modal-reaperturar';
+import { ModalCompletar } from './pages/modal-completar/modal-completar';
 import { SubtareaInfo } from './pages/subtarea-info/subtarea-info';
 
 @NgModule({
@@ -25,6 +26,7 @@ import { SubtareaInfo } from './pages/subtarea-info/subtarea-info';
     ModalFiltros,
     ModalFiltrosAdmin,
     ModalReaperturar,
+    ModalCompletar,
     SubtareaInfo
   ],
   imports: [

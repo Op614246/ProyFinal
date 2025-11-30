@@ -1,25 +1,12 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /ProyFinal/backend/api/rest/admin/
-    
-    # No reescribir si es un archivo o directorio real
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
-    
-    # Reescribir todas las solicitudes a index.php
-    RewriteRule ^(.*)$ index.php [QSA,L]
+    RewriteRule ^ index.php [QSA,L]
 </IfModule>
 
-# ============================================
-# CORS Headers
-# ============================================
-Header always set Access-Control-Allow-Origin "*"
-Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-Header always set Access-Control-Allow-Headers "Authorization, Content-Type, X-API-KEY, Accept"
-Header always set Access-Control-Max-Age "3600"
-
-# ============================================
-# Pasar Authorization Header a PHP
-# ============================================
-SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
-SetEnvIf X-API-KEY "(.*)" HTTP_X_API_KEY=$1
+# Pasar headers a PHP
+<IfModule mod_setenvif.c>
+    SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+    SetEnvIf X-API-KEY "(.*)" HTTP_X_API_KEY=$1
+</IfModule>

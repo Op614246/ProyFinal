@@ -51,10 +51,14 @@ export class AuthService {
       // Desencriptar la respuesta
       return from(this.cryptoService.decrypt(response.data.payload, response.data.iv)).pipe(
         map(decryptedData => {
+          // PRIMERO limpiar cualquier dato previo
+          this.tokenService.clear();
+          
           // Guardar token y datos del usuario
           if (decryptedData.token) {
             this.tokenService.setToken(decryptedData.token);
             this.tokenService.setUser({
+              id: decryptedData.id,
               username: decryptedData.username,
               role: decryptedData.role
             });
@@ -77,21 +81,25 @@ export class AuthService {
 
   /**
    * Cierra la sesión actual
-   * Llama al backend para invalidar el token y limpia el almacenamiento local
+   * Primero limpia localmente, luego invalida en el servidor
    */
   logout(): void {
-    // Llamar al backend para invalidar la sesión
-    this.http.post<ApiResponse>(`${this.apiUrl}/logout`, {}).subscribe({
-      next: () => {
-        this.tokenService.clear();
-        this.router.navigate(['/login']);
-      },
-      error: () => {
-        // Aunque falle el backend, limpiamos localmente
-        this.tokenService.clear();
-        this.router.navigate(['/login']);
-      }
-    });
+    // Guardar el token antes de limpiar para poder enviarlo
+    const token = this.tokenService.getToken();
+    
+    // PRIMERO limpiar localStorage para evitar problemas de cache
+    this.tokenService.clear();
+    
+    // Llamar al backend para invalidar la sesión (en background)
+    if (token) {
+      this.http.post<ApiResponse>(`${this.apiUrl}/logout`, {}).subscribe({
+        next: () => console.log('Sesión cerrada en servidor'),
+        error: (err) => console.log('Error al cerrar sesión en servidor:', err)
+      });
+    }
+    
+    // Navegar al login con replaceUrl para limpiar el historial
+    this.router.navigateByUrl('/login', { replaceUrl: true });
   }
 
   /**
@@ -131,9 +139,25 @@ export class AuthService {
 
   /**
    * Obtiene los datos del usuario actual
+   * Si faltan datos en localStorage, los extrae del JWT
    */
   getCurrentUser(): AuthUser | null {
-    return this.tokenService.getUser();
+    const user = this.tokenService.getUser();
+    
+    // Si hay token pero faltan datos del usuario, extraer del JWT
+    const token = this.tokenService.getToken();
+    if (token) {
+      const payload = this.tokenService.decodeToken(token);
+      if (payload?.data) {
+        return {
+          id: user?.id ?? payload.data.id,
+          username: user?.username ?? payload.data.username,
+          role: payload.data.role // Siempre tomar el rol del token
+        };
+      }
+    }
+    
+    return user;
   }
 
   /**

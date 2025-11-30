@@ -24,18 +24,14 @@ require_once __DIR__ . '/../../config.php';
 // CORS - Los headers se manejan en .htaccess
 // Solo manejamos OPTIONS aquí por seguridad
 // ============================================
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
 
 // ============================================
 // MIDDLEWARES (se ejecutan en orden inverso)
 // ============================================
 
 // 1. JWT Middleware - Autorización de usuario
-//    Excluye la ruta /login que no requiere token
-$app->add(new JwtMiddleware(['/login']));
+//    Excluye rutas que no requieren token JWT activo
+$app->add(new JwtMiddleware(['/login', '/logout']));
 
 // 2. API Key Middleware - Autenticación de la aplicación
 $app->add(new SecurityMiddleware(getenv('API_KEY')));

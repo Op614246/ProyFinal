@@ -1,0 +1,21 @@
+:host {
+  --background: white;
+}
+
+ion-content {
+  --background: white;
+}
+
+.custom-textarea {
+  --background: #f9fafb;
+  --border-radius: 8px;
+  --padding-start: 12px;
+  --padding-end: 12px;
+}
+
+ion-footer {
+  ion-toolbar {
+    --background: white;
+    --border-width: 0;
+  }
+}

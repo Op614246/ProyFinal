@@ -1,12 +1,102 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Observable, BehaviorSubject, Subject } from 'rxjs';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable, BehaviorSubject, Subject, tap, map, from, switchMap } from 'rxjs';
 import { environment } from '../../../../environments/environment';
+import { CryptoService } from '../../../core/services/crypto.service';
 
 // ============================================
-// INTERFACES Y MODELOS
+// INTERFACES Y MODELOS (Schema Imagen 2)
 // ============================================
 
+export interface Task {
+  id: number;
+  title: string;
+  description: string;
+  categoria_id: number | null;
+  categoria_nombre: string | null;
+  categoria_color: string | null;
+  status: 'pending' | 'in_process' | 'completed' | 'incomplete' | 'inactive';
+  priority: 'high' | 'medium' | 'low';
+  deadline: string | null;
+  fecha_asignacion: string;
+  horainicio: string | null;
+  horafin: string | null;
+  assigned_user_id: number | null;
+  assigned_username: string | null;
+  assigned_fullname: string | null;
+  created_by_user_id: number | null;
+  created_by_name: string | null;
+  sucursal: string | null;
+  progreso: number;
+  completed_at: string | null;
+  evidence_image: string | null;
+  completion_notes: string | null;
+  motivo_reapertura: string | null;
+  observaciones_reapertura: string | null;
+  fecha_reapertura: string | null;
+  evidencia_count: number;
+  evidencias: TaskEvidence[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskEvidence {
+  id: number;
+  file_path: string;
+  file_name: string;
+  file_size_kb: number;
+  mime_type: string;
+  observaciones: string | null;
+  uploaded_at: string;
+  username: string;
+  uploaded_by: string;
+}
+
+export interface Categoria {
+  id: number;
+  nombre: string;
+  descripcion: string | null;
+  color: string;
+}
+
+export interface UserAssignable {
+  id: number;
+  username: string;
+  nombre_completo: string;
+  departamento: string | null;
+  estado: string | null;
+  tareas_activas: number;
+}
+
+export interface TaskStatistics {
+  total: number;
+  pendientes: number;
+  en_proceso: number;
+  completadas: number;
+  incompletas: number;
+  inactivas: number;
+  alta_prioridad: number;
+  vencidas: number;
+}
+
+export interface TaskFilter {
+  fecha?: string;
+  fecha_inicio?: string;
+  fecha_fin?: string;
+  status?: string;
+  priority?: string;
+  assigned_user_id?: number;
+  sucursal?: string;
+  categoria_id?: number;
+}
+
+export interface ApiResponse<T> {
+  tipo: number; // 1=éxito, 0=error
+  mensajes: string[];
+  data: T;
+}
+
+// Interfaces legacy para compatibilidad
 export interface Tarea {
   id: string;
   titulo: string;
@@ -14,9 +104,9 @@ export interface Tarea {
   estado: 'Pendiente' | 'En progreso' | 'Completada' | 'Cerrada' | 'Activo' | 'Inactiva';
   estadodetarea: 'Activo' | 'Inactiva';
   prioridad: 'Baja' | 'Media' | 'Alta';
-  Prioridad: 'Baja' | 'Media' | 'Alta'; // Alias para compatibilidad con vistas
+  Prioridad: 'Baja' | 'Media' | 'Alta';
   completada: boolean;
-  progreso: number; // 0-100
+  progreso: number;
   fechaAsignacion: string;
   fechaVencimiento?: string;
   Categoria: string;
@@ -43,7 +133,12 @@ export interface TareaAdmin {
   subtareasCompletadas: number;
   created_by_nombre: string;
   created_by_apellido: string;
-  Tarea: Tarea[]; // Array de subtareas
+  Tarea: Tarea[];
+  motivoReapertura?: string;
+  observacionesReapertura?: string;
+  observaciones?: string;
+  imagenes?: string[];
+  fechaCompletado?: string;
 }
 
 export interface ResumenTareas {
@@ -53,17 +148,14 @@ export interface ResumenTareas {
   porcentajeAvance: number;
 }
 
-export interface ApiResponse<T> {
-  tipo: number; // 1=éxito, 2=advertencia, 3=error
-  mensajes: string[];
-  data: T;
-}
-
 @Injectable({
   providedIn: 'root',
 })
 export class TareasService {
-  private baseUrl = `${environment.apiUrl}/admin`;
+  // URL base para el nuevo schema
+  private tasksUrl = `${environment.apiUrl}/tasks`;
+  // URL legacy para compatibilidad
+  private adminUrl = `${environment.apiUrl}/admin`;
   
   // Control de modo admin
   public apartadoadmin = true;
@@ -71,41 +163,379 @@ export class TareasService {
   // Usuario actual del sistema
   public usuarioActual = 'Usuario Actual';
   
-  // Subject para notificar cambios en subtareas
+  // Subject para notificar cambios
   private subtareasActualizadasSubject = new Subject<void>();
   public subtareasActualizadas$ = this.subtareasActualizadasSubject.asObservable();
   
-  // BehaviorSubjects para estado reactivo
+  // BehaviorSubjects para estado reactivo - Nuevo schema
+  private tasksSubject = new BehaviorSubject<Task[]>([]);
+  public tasks$ = this.tasksSubject.asObservable();
+  
+  private statisticsSubject = new BehaviorSubject<TaskStatistics | null>(null);
+  public statistics$ = this.statisticsSubject.asObservable();
+  
+  private categoriasSubject = new BehaviorSubject<Categoria[]>([]);
+  public categorias$ = this.categoriasSubject.asObservable();
+  
+  // Legacy subjects
   private tareasAdminSubject = new BehaviorSubject<TareaAdmin[]>([]);
   public tareasAdmin$ = this.tareasAdminSubject.asObservable();
   
   private tareasSeleccionadasSubject = new BehaviorSubject<Set<string>>(new Set());
   public tareasSeleccionadas$ = this.tareasSeleccionadasSubject.asObservable();
   
-  private filtrosSubject = new BehaviorSubject<any>({});
+  private filtrosSubject = new BehaviorSubject<TaskFilter>({});
   public filtros$ = this.filtrosSubject.asObservable();
   
   // Subject para notificaciones
   private actualizacionSubject = new Subject<void>();
   public actualizacion$ = this.actualizacionSubject.asObservable();
   
-  constructor(private http: HttpClient) {
-    this.cargarTareasAdmin();
+  constructor(
+    private http: HttpClient,
+    private cryptoService: CryptoService
+  ) {
+    this.cargarCategorias();
+    this.cargarEstadisticas();
   }
   
   // ============================================
-  // CRUD - TAREAS ADMIN
+  // CRUD - NUEVO SCHEMA (TASKS)
   // ============================================
   
   /**
-   * Obtener todas las tareas admin
+   * Obtener todas las tareas con filtros (Admin)
    */
-  obtenerTareasAdmin(): Observable<ApiResponse<{tareas: TareaAdmin[], total: number}>> {
-    return this.http.get<ApiResponse<{tareas: TareaAdmin[], total: number}>>(`${this.baseUrl}/`);
+  getTasks(filters?: TaskFilter): Observable<ApiResponse<Task[]>> {
+    let params = new HttpParams();
+    
+    if (filters) {
+      Object.keys(filters).forEach(key => {
+        const value = (filters as any)[key];
+        if (value !== undefined && value !== null && value !== '') {
+          params = params.set(key, value.toString());
+        }
+      });
+    }
+    
+    return this.http.get<ApiResponse<Task[]>>(`${this.tasksUrl}/`, { params }).pipe(
+      tap(response => {
+        if (response.tipo === 1) {
+          this.tasksSubject.next(response.data);
+        }
+      })
+    );
   }
   
   /**
-   * Cargar tareas admin y actualizar el state
+   * Obtener tareas disponibles para auto-asignación (solo del día)
+   */
+  getAvailableTasks(): Observable<ApiResponse<Task[]>> {
+    return this.http.get<ApiResponse<Task[]>>(`${this.tasksUrl}/available`);
+  }
+  
+  /**
+   * Obtener una tarea por ID
+   */
+  getTaskById(id: number): Observable<ApiResponse<Task>> {
+    return this.http.get<ApiResponse<Task>>(`${this.tasksUrl}/${id}`);
+  }
+  
+  /**
+   * Crear nueva tarea (Admin)
+   */
+  createTask(data: Partial<Task>): Observable<ApiResponse<{ task_id: number }>> {
+    return from(this.cryptoService.encrypt(data)).pipe(
+      switchMap(encrypted => this.http.post<ApiResponse<{ task_id: number }>>(`${this.tasksUrl}/`, encrypted)),
+      tap(response => {
+        if (response.tipo === 1) {
+          this.notificarActualizacion();
+        }
+      })
+    );
+  }
+  
+  /**
+   * Asignar tarea
+   * - User: auto-asigna
+   * - Admin: asigna a cualquier usuario
+   */
+  assignTask(taskId: number, userId?: number): Observable<ApiResponse<any>> {
+    const data = userId ? { user_id: userId } : {};
+    return from(this.cryptoService.encrypt(data)).pipe(
+      switchMap(encrypted => this.http.put<ApiResponse<any>>(`${this.tasksUrl}/${taskId}/assign`, encrypted)),
+      tap(response => {
+        if (response.tipo === 1) {
+          this.notificarActualizacion();
+        }
+      })
+    );
+  }
+  
+  /**
+   * Completar tarea con observaciones e imagen
+   */
+  completeTask(taskId: number, observaciones: string, imagen?: File): Observable<ApiResponse<any>> {
+    const formData = new FormData();
+    formData.append('observaciones', observaciones);
+    
+    if (imagen) {
+      formData.append('evidence', imagen);
+    }
+    
+    return this.http.post<ApiResponse<any>>(`${this.tasksUrl}/${taskId}/complete`, formData).pipe(
+      tap(response => {
+        if (response.tipo === 1) {
+          this.notificarActualizacion();
+        }
+      })
+    );
+  }
+  
+  /**
+   * Reabrir tarea (Admin)
+   */
+  reopenTask(taskId: number, motivo: string, observaciones?: string): Observable<ApiResponse<any>> {
+    const data = { motivo, observaciones };
+    return from(this.cryptoService.encrypt(data)).pipe(
+      switchMap(encrypted => this.http.put<ApiResponse<any>>(`${this.tasksUrl}/${taskId}/reopen`, encrypted)),
+      tap(response => {
+        if (response.tipo === 1) {
+          this.notificarActualizacion();
+        }
+      })
+    );
+  }
+  
+  /**
+   * Actualizar estado de tarea (Admin)
+   */
+  updateTaskStatus(taskId: number, status: string): Observable<ApiResponse<any>> {
+    return from(this.cryptoService.encrypt({ status })).pipe(
+      switchMap(encrypted => this.http.put<ApiResponse<any>>(`${this.tasksUrl}/${taskId}/status`, encrypted)),
+      tap(response => {
+        if (response.tipo === 1) {
+          this.notificarActualizacion();
+        }
+      })
+    );
+  }
+  
+  /**
+   * Eliminar tarea (Admin)
+   */
+  deleteTask(taskId: number): Observable<ApiResponse<any>> {
+    return this.http.delete<ApiResponse<any>>(`${this.tasksUrl}/${taskId}`).pipe(
+      tap(response => {
+        if (response.tipo === 1) {
+          this.notificarActualizacion();
+        }
+      })
+    );
+  }
+  
+  /**
+   * Obtener estadísticas
+   */
+  getStatistics(): Observable<ApiResponse<TaskStatistics>> {
+    return this.http.get<ApiResponse<TaskStatistics>>(`${this.tasksUrl}/statistics`);
+  }
+  
+  /**
+   * Obtener usuarios disponibles para asignación (Admin)
+   */
+  getAvailableUsers(): Observable<ApiResponse<UserAssignable[]>> {
+    return this.http.get<ApiResponse<UserAssignable[]>>(`${this.tasksUrl}/users`);
+  }
+  
+  /**
+   * Obtener categorías (desde endpoint dedicado)
+   */
+  getCategorias(): Observable<ApiResponse<Categoria[]>> {
+    return this.http.get<ApiResponse<Categoria[]>>(`${environment.apiUrl}/categorias/`);
+  }
+  
+  /**
+   * Obtener sucursales
+   */
+  getSucursales(): Observable<ApiResponse<any[]>> {
+    return this.http.get<ApiResponse<any[]>>(`${environment.apiUrl}/sucursales/`);
+  }
+  
+  // ============================================
+  // MÉTODOS DE CARGA
+  // ============================================
+  
+  cargarTareas(filters?: TaskFilter): void {
+    this.getTasks(filters).subscribe({
+      next: (response) => {
+        if (response.tipo === 1) {
+          this.tasksSubject.next(response.data);
+        }
+      },
+      error: (err) => console.error('Error cargando tareas:', err)
+    });
+  }
+  
+  cargarEstadisticas(): void {
+    this.getStatistics().subscribe({
+      next: (response) => {
+        if (response.tipo === 1) {
+          this.statisticsSubject.next(response.data);
+        }
+      },
+      error: (err) => console.error('Error cargando estadísticas:', err)
+    });
+  }
+  
+  cargarCategorias(): void {
+    this.getCategorias().subscribe({
+      next: (response) => {
+        if (response.tipo === 1) {
+          this.categoriasSubject.next(response.data);
+        }
+      },
+      error: (err) => console.error('Error cargando categorías:', err)
+    });
+  }
+  
+  // ============================================
+  // UTILIDADES
+  // ============================================
+  
+  /**
+   * Traducir estado de inglés a español
+   */
+  translateStatus(status: string): string {
+    const map: Record<string, string> = {
+      'pending': 'Pendiente',
+      'in_process': 'En progreso',
+      'completed': 'Completada',
+      'incomplete': 'Incompleta',
+      'inactive': 'Inactiva'
+    };
+    return map[status] || status;
+  }
+  
+  /**
+   * Traducir prioridad de inglés a español
+   */
+  translatePriority(priority: string): string {
+    const map: Record<string, string> = {
+      'high': 'Alta',
+      'medium': 'Media',
+      'low': 'Baja'
+    };
+    return map[priority] || priority;
+  }
+  
+  /**
+   * Obtener clase CSS para estado
+   */
+  getStatusClass(status: string): string {
+    const map: Record<string, string> = {
+      'pending': 'warning',
+      'in_process': 'primary',
+      'completed': 'success',
+      'incomplete': 'danger',
+      'inactive': 'medium'
+    };
+    return map[status] || 'medium';
+  }
+  
+  /**
+   * Obtener clase CSS para prioridad
+   */
+  getPriorityClass(priority: string): string {
+    const map: Record<string, string> = {
+      'high': 'danger',
+      'medium': 'warning',
+      'low': 'success'
+    };
+    return map[priority] || 'medium';
+  }
+  
+  // ============================================
+  // LEGACY METHODS (Compatibilidad)
+  // ============================================
+  
+  /**
+   * Obtener todas las tareas admin con filtros opcionales (legacy)
+   */
+  obtenerTareasAdmin(filtros?: { fecha?: string; status?: string; sucursal_id?: number; categoria_id?: number; assigned_user_id?: number }): Observable<ApiResponse<{tareas: TareaAdmin[], total: number}>> {
+    let params = new HttpParams();
+    
+    if (filtros) {
+      if (filtros.fecha) {
+        params = params.set('fecha', filtros.fecha);
+      }
+      if (filtros.status) {
+        params = params.set('status', filtros.status);
+      }
+      if (filtros.sucursal_id) {
+        params = params.set('sucursal_id', filtros.sucursal_id.toString());
+      }
+      if (filtros.categoria_id) {
+        params = params.set('categoria_id', filtros.categoria_id.toString());
+      }
+      if (filtros.assigned_user_id) {
+        params = params.set('assigned_user_id', filtros.assigned_user_id.toString());
+      }
+    }
+    
+    return this.http.get<ApiResponse<{tareas: TareaAdmin[], total: number}>>(`${this.adminUrl}/`, { params });
+  }
+
+  /**
+   * Obtener tareas sin asignar del día (para usuarios)
+   */
+  obtenerTareasSinAsignar(fecha?: string): Observable<ApiResponse<{tareas: TareaAdmin[], total: number}>> {
+    let params = new HttpParams();
+    params = params.set('sin_asignar', 'true');
+    if (fecha) {
+      params = params.set('fecha', fecha);
+    }
+    return this.http.get<ApiResponse<{tareas: TareaAdmin[], total: number}>>(`${this.adminUrl}/`, { params });
+  }
+
+  /**
+   * Auto-asignar tarea al usuario actual
+   */
+  autoAsignarTarea(tareaId: string): Observable<ApiResponse<any>> {
+    return this.http.post<ApiResponse<any>>(`${this.adminUrl}/${tareaId}/asignar`, {});
+  }
+
+  /**
+   * Iniciar tarea (cambiar estado a 'En progreso')
+   */
+  iniciarTarea(tareaId: string): Observable<ApiResponse<any>> {
+    return this.http.put<ApiResponse<any>>(`${this.adminUrl}/${tareaId}/iniciar`, {});
+  }
+
+  /**
+   * Finalizar tarea con evidencia
+   */
+  finalizarTarea(tareaId: string, observaciones: string, imagen?: File): Observable<ApiResponse<any>> {
+    const formData = new FormData();
+    formData.append('observaciones', observaciones);
+    
+    if (imagen) {
+      formData.append('evidence', imagen);
+    }
+    
+    return this.http.post<ApiResponse<any>>(`${this.adminUrl}/${tareaId}/completar`, formData);
+  }
+
+  /**
+   * Reabrir tarea (Admin)
+   */
+  reabrirTarea(tareaId: string, motivo: string, observaciones?: string): Observable<ApiResponse<any>> {
+    const data = { motivo, observaciones };
+    return this.http.put<ApiResponse<any>>(`${this.adminUrl}/${tareaId}/reabrir`, data);
+  }
+  
+  /**
+   * Cargar tareas admin y actualizar el state (legacy)
    */
   cargarTareasAdmin(): void {
     this.obtenerTareasAdmin().subscribe({
@@ -119,42 +549,42 @@ export class TareasService {
   }
   
   /**
-   * Obtener tarea admin por ID
+   * Obtener tarea admin por ID (legacy)
    */
   obtenerTareaAdminPorId(id: string): Observable<ApiResponse<TareaAdmin>> {
-    return this.http.get<ApiResponse<TareaAdmin>>(`${this.baseUrl}/${id}`);
+    return this.http.get<ApiResponse<TareaAdmin>>(`${this.adminUrl}/${id}`);
   }
   
   /**
-   * Obtener tareas admin por fecha
+   * Obtener tareas admin por fecha (legacy)
    */
   obtenerTareasAdminPorFecha(fecha: string): Observable<ApiResponse<{tareas: TareaAdmin[], total: number}>> {
-    return this.http.get<ApiResponse<{tareas: TareaAdmin[], total: number}>>(`${this.baseUrl}/fecha/${fecha}`);
+    return this.http.get<ApiResponse<{tareas: TareaAdmin[], total: number}>>(`${this.adminUrl}/fecha/${fecha}`);
   }
   
   /**
-   * Crear tarea admin
+   * Crear tarea admin (legacy)
    */
   crearTareaAdmin(data: Partial<TareaAdmin>): Observable<ApiResponse<TareaAdmin>> {
-    return this.http.post<ApiResponse<TareaAdmin>>(`${this.baseUrl}/`, data);
+    return this.http.post<ApiResponse<TareaAdmin>>(`${this.adminUrl}/`, data);
   }
   
   /**
-   * Actualizar tarea admin
+   * Actualizar tarea admin (legacy)
    */
   actualizarTareaAdmin(id: string, data: Partial<TareaAdmin>): Observable<ApiResponse<TareaAdmin>> {
-    return this.http.put<ApiResponse<TareaAdmin>>(`${this.baseUrl}/${id}`, data);
+    return this.http.put<ApiResponse<TareaAdmin>>(`${this.adminUrl}/${id}`, data);
   }
   
   /**
-   * Eliminar tarea admin
+   * Eliminar tarea admin (legacy)
    */
   eliminarTareaAdmin(id: string): Observable<ApiResponse<{id: string}>> {
-    return this.http.delete<ApiResponse<{id: string}>>(`${this.baseUrl}/${id}`);
+    return this.http.delete<ApiResponse<{id: string}>>(`${this.adminUrl}/${id}`);
   }
   
   // ============================================
-  // GESTIÓN DE ESTADO Y FILTROS
+  // GESTIÓN DE ESTADO Y FILTROS (legacy)
   // ============================================
   
   /**
@@ -167,12 +597,13 @@ export class TareasService {
   /**
    * Aplicar filtros a las tareas
    */
-  aplicarFiltros(filtros: any): void {
+  aplicarFiltros(filtros: TaskFilter): void {
     this.filtrosSubject.next(filtros);
+    this.cargarTareas(filtros);
   }
   
   /**
-   * Obtener tareas filtradas
+   * Obtener tareas filtradas (legacy)
    */
   obtenerTareasFiltradas(): TareaAdmin[] {
     const tareas = this.tareasAdminSubject.value;
@@ -183,8 +614,7 @@ export class TareasService {
     }
     
     return tareas.filter(tarea => {
-      if (filtros.estado && tarea.estado !== filtros.estado) return false;
-      if (filtros.categoria && tarea.Categoria !== filtros.categoria) return false;
+      if (filtros.status && tarea.estado !== filtros.status) return false;
       if (filtros.sucursal && tarea.sucursal !== filtros.sucursal) return false;
       return true;
     });

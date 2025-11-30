@@ -1,6 +1,6 @@
-import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { MenuController, ModalController } from '@ionic/angular';
+import { MenuController, ModalController, IonDatetime, AlertController } from '@ionic/angular';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import {
@@ -24,10 +24,14 @@ import {
   faEllipsisV,
   faSignOut,
   faChevronDown,
-  faChevronUp
+  faChevronUp,
+  faRotateLeft
 } from '@fortawesome/pro-regular-svg-icons';
 import { TareasService, TareaAdmin, Tarea, ResumenTareas } from './service/tareas.service';
 import { AuthService } from '../../core/services/auth.service';
+import { ToastService } from '../../core/services/toast.service';
+import { ModalReaperturar } from './pages/modal-reaperturar/modal-reaperturar';
+import { ModalCompletar } from './pages/modal-completar/modal-completar';
 
 @Component({
   selector: 'app-tareas',
@@ -59,10 +63,13 @@ export class Tareas implements OnInit, OnDestroy {
   faSignOut = faSignOut;
   faChevronDown = faChevronDown;
   faChevronUp = faChevronUp;
+  faRotateLeft = faRotateLeft;
 
   // Estado de la página
-  selectedTab: 'admin' | 'mis-tareas' = 'admin';
+  selectedTab: 'admin' | 'mis-tareas' | 'sin-asignar' = 'admin';
   tareasAdmin: TareaAdmin[] = [];
+  misTareas: TareaAdmin[] = [];
+  tareasSinAsignar: TareaAdmin[] = [];
   resumen: ResumenTareas = {
     totalTareas: 0,
     tareasCompletadas: 0,
@@ -76,13 +83,19 @@ export class Tareas implements OnInit, OnDestroy {
   diaString: string = '';
   semana: { fecha: Date; habilitado: boolean }[] = [];
   verCalendario: boolean = true;
+  mostrarCalendarioCompleto: boolean = false;
+  fechaSeleccionadaISO: string = new Date().toISOString();
   
   // Usuario
   nombreUsuario: string = 'Usuario';
+  rolUsuario: string = 'Usuario';
+  isAdmin: boolean = false;
+  userId: number | null = null;
   
   // Filtros
   filtroEstado: string = 'todos';
   filtroCategoria: string = 'todos';
+  filtrarPorFecha: boolean = true;
   searchTerm: string = '';
   
   // Selección múltiple
@@ -94,19 +107,31 @@ export class Tareas implements OnInit, OnDestroy {
   error: string | null = null;
   
   private destroy$ = new Subject<void>();
+  private primeraVez = true; // Para evitar doble carga inicial
 
   constructor(
     private tareasService: TareasService,
     private modalController: ModalController,
     private menuController: MenuController,
+    private alertController: AlertController,
     private authService: AuthService,
+    private toastService: ToastService,
     private router: Router,
     private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
+    // Resetear estado al inicializar
+    this.resetearEstado();
+    this.cargarDatosUsuario(); // Primero cargar datos del usuario
     this.inicializar();
-    this.cargarDatosUsuario();
+    
+    // Suscribirse a actualizaciones del servicio para recargar tareas automáticamente
+    this.tareasService.actualizacion$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.cargarTareas();
+      });
   }
 
   ngOnDestroy(): void {
@@ -114,9 +139,32 @@ export class Tareas implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  // Resetear todo el estado del componente
+  private resetearEstado(): void {
+    this.tareasAdmin = [];
+    this.misTareas = [];
+    this.tareasSinAsignar = [];
+    this.tareasSeleccionadas.clear();
+    this.modoSeleccion = false;
+    this.selectedTab = 'admin';
+    this.isAdmin = false;
+    this.userId = null;
+    this.nombreUsuario = 'Usuario';
+    this.rolUsuario = 'Usuario';
+  }
+
   inicializar(): void {
-    this.actualizarFecha();
+    // Si no es admin, forzar tab "mis-tareas"
+    if (!this.isAdmin) {
+      this.selectedTab = 'mis-tareas';
+    }
+    
+    // Actualizar fecha sin recargar tareas
+    this.diaString = this.formatearFecha(this.dia);
+    this.nroSemana = this.calcularNumeroSemana(this.dia);
+    this.fechaSeleccionadaISO = this.dia.toISOString();
     this.generarSemana();
+    // Primera carga de tareas
     this.cargarTareas();
   }
 
@@ -124,6 +172,9 @@ export class Tareas implements OnInit, OnDestroy {
     const usuario = this.authService.getCurrentUser();
     if (usuario) {
       this.nombreUsuario = usuario.username || 'Usuario';
+      this.rolUsuario = usuario.role === 'admin' ? 'Administrador' : 'Usuario';
+      this.isAdmin = usuario.role === 'admin';
+      this.userId = usuario.id ?? null;
     }
   }
 
@@ -176,6 +227,36 @@ export class Tareas implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  // Abrir/cerrar calendario completo popup
+  toggleCalendarioCompleto(): void {
+    this.mostrarCalendarioCompleto = !this.mostrarCalendarioCompleto;
+    this.cdr.markForCheck();
+  }
+
+  // Cuando se selecciona fecha del calendario popup
+  onFechaCalendarioChange(event: any): void {
+    const fechaISO = event.detail.value;
+    this.fechaSeleccionadaISO = fechaISO;
+    this.dia = new Date(fechaISO);
+    this.actualizarFecha();
+    this.generarSemana();
+    this.mostrarCalendarioCompleto = false;
+    this.cdr.markForCheck();
+  }
+
+  // Toggle filtrar por fecha - recarga tareas al cambiar
+  toggleFiltrarPorFecha(): void {
+    this.filtrarPorFecha = !this.filtrarPorFecha;
+    this.cargarTareas(); // Recargar con o sin filtro de fecha
+    this.cdr.markForCheck();
+  }
+
+  // Watch del toggle para ngModel
+  onFiltrarPorFechaChange(): void {
+    this.cargarTareas();
+    this.cdr.markForCheck();
+  }
+
   async cerrarSesion(): Promise<void> {
     // Cerrar el menú primero
     await this.menuController.close('main-menu');
@@ -193,19 +274,74 @@ export class Tareas implements OnInit, OnDestroy {
     return dias[fecha.getDay()];
   }
 
+  // Formatea la fecha a YYYY-MM-DD para el backend
+  private formatearFechaISO(fecha: Date): string {
+    const year = fecha.getFullYear();
+    const month = (fecha.getMonth() + 1).toString().padStart(2, '0');
+    const day = fecha.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   cargarTareas(): void {
     this.cargando = true;
     this.cdr.markForCheck();
     
-    this.tareasService.obtenerTareasAdmin()
+    // Construir filtros para enviar al backend
+    const filtros: { fecha?: string; status?: string; assigned_user_id?: number } = {};
+    
+    if (this.filtrarPorFecha) {
+      filtros.fecha = this.formatearFechaISO(this.dia);
+    }
+    
+    if (this.isAdmin) {
+      // Admin: cargar todas las tareas (para vista admin) y luego filtrar en tabs
+      this.tareasService.obtenerTareasAdmin(filtros)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (response) => {
+            if (response.tipo === 1) {
+              this.tareasAdmin = response.data.tareas;
+              this.actualizarResumen();
+            } else {
+              this.error = response.mensajes[0] || 'Error al cargar tareas';
+            }
+            this.cargando = false;
+            this.cdr.markForCheck();
+          },
+          error: (err) => {
+            console.error('Error:', err);
+            this.error = 'Error al conectar con el servidor';
+            this.cargando = false;
+            this.cdr.markForCheck();
+          }
+        });
+    } else {
+      // Usuario: cargar sus tareas asignadas y tareas sin asignar
+      this.cargarTareasUsuario();
+    }
+  }
+
+  // Cargar tareas para usuario normal
+  cargarTareasUsuario(): void {
+    const filtros: { fecha?: string; assigned_user_id?: number } = {};
+    
+    if (this.filtrarPorFecha) {
+      filtros.fecha = this.formatearFechaISO(this.dia);
+    }
+    
+    if (this.userId) {
+      filtros.assigned_user_id = this.userId;
+    }
+
+    // Cargar mis tareas asignadas
+    this.tareasService.obtenerTareasAdmin(filtros)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
           if (response.tipo === 1) {
-            this.tareasAdmin = response.data.tareas;
-            this.actualizarResumen();
-          } else {
-            this.error = response.mensajes[0] || 'Error al cargar tareas';
+            // Ordenar por prioridad (Alta > Media > Baja) y luego estado (Completada al final)
+            this.misTareas = this.ordenarTareasPorPrioridadYEstado(response.data.tareas);
+            this.actualizarResumenUsuario();
           }
           this.cargando = false;
           this.cdr.markForCheck();
@@ -217,6 +353,166 @@ export class Tareas implements OnInit, OnDestroy {
           this.cdr.markForCheck();
         }
       });
+
+    // Cargar tareas sin asignar del día
+    const fechaHoy = this.formatearFechaISO(this.dia);
+    this.tareasService.obtenerTareasSinAsignar(fechaHoy)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          if (response.tipo === 1) {
+            this.tareasSinAsignar = response.data.tareas;
+          }
+          this.cdr.markForCheck();
+        },
+        error: (err) => console.error('Error cargando tareas sin asignar:', err)
+      });
+  }
+
+  // Ordenar tareas: primero por prioridad, luego completadas al final
+  ordenarTareasPorPrioridadYEstado(tareas: TareaAdmin[]): TareaAdmin[] {
+    const prioridadOrden: { [key: string]: number } = { 'Alta': 1, 'Media': 2, 'Baja': 3 };
+    const estadoOrden: { [key: string]: number } = { 'En progreso': 1, 'Pendiente': 2, 'Completada': 3 };
+
+    return tareas.sort((a, b) => {
+      // Primero por estado (Completada al final)
+      const estadoA = estadoOrden[a.estado] || 99;
+      const estadoB = estadoOrden[b.estado] || 99;
+      if (estadoA !== estadoB) return estadoA - estadoB;
+
+      // Luego por prioridad (Alta primero) - usando las subtareas
+      const prioridadA = a.Tarea && a.Tarea[0] ? (prioridadOrden[a.Tarea[0].Prioridad] || 99) : 99;
+      const prioridadB = b.Tarea && b.Tarea[0] ? (prioridadOrden[b.Tarea[0].Prioridad] || 99) : 99;
+      return prioridadA - prioridadB;
+    });
+  }
+
+  // Actualizar resumen para usuario
+  actualizarResumenUsuario(): void {
+    const tareas = this.misTareas;
+    this.resumen = {
+      totalTareas: tareas.length,
+      tareasCompletadas: tareas.filter(t => t.estado === 'Completada').length,
+      tareasEnProgreso: tareas.filter(t => t.estado === 'En progreso').length,
+      porcentajeAvance: tareas.length > 0 
+        ? Math.round((tareas.filter(t => t.estado === 'Completada').length / tareas.length) * 100) 
+        : 0
+    };
+  }
+
+  // Auto-asignar tareas seleccionadas al usuario
+  async asignarTareasSeleccionadas(): Promise<void> {
+    if (this.tareasSeleccionadas.size === 0) return;
+
+    const tareasIds = Array.from(this.tareasSeleccionadas);
+    let exitos = 0;
+
+    for (const tareaId of tareasIds) {
+      try {
+        await this.tareasService.autoAsignarTarea(tareaId).toPromise();
+        exitos++;
+      } catch (err) {
+        console.error(`Error asignando tarea ${tareaId}:`, err);
+      }
+    }
+
+    if (exitos > 0) {
+      this.tareasSeleccionadas.clear();
+      this.toastService.success(`${exitos} tarea(s) asignada(s) correctamente`);
+      this.cargarTareas();
+    } else {
+      this.toastService.error('No se pudieron asignar las tareas');
+    }
+  }
+
+  // Iniciar tarea (cambiar a En progreso) con confirmación
+  async iniciarTarea(tarea: TareaAdmin, event?: Event): Promise<void> {
+    if (event) event.stopPropagation();
+
+    const alert = await this.alertController.create({
+      header: 'Iniciar Tarea',
+      message: `¿Estás seguro de que deseas iniciar la tarea "${tarea.titulo}"?`,
+      buttons: [
+        {
+          text: 'Cancelar',
+          role: 'cancel'
+        },
+        {
+          text: 'Iniciar',
+          handler: () => {
+            this.ejecutarIniciarTarea(tarea);
+          }
+        }
+      ]
+    });
+
+    await alert.present();
+  }
+
+  // Ejecutar inicio de tarea
+  private ejecutarIniciarTarea(tarea: TareaAdmin): void {
+    this.tareasService.iniciarTarea(tarea.id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          if (response.tipo === 1) {
+            this.toastService.success('Tarea iniciada correctamente');
+            this.cargarTareas();
+          } else {
+            this.toastService.error(response.mensajes?.join(' ') || 'Error al iniciar tarea');
+          }
+        },
+        error: (err) => {
+          console.error('Error iniciando tarea:', err);
+          this.toastService.error('Error al iniciar la tarea');
+        }
+      });
+  }
+
+  // Finalizar tarea con evidencia
+  async finalizarTarea(tarea: TareaAdmin, event?: Event): Promise<void> {
+    if (event) event.stopPropagation();
+
+    const modal = await this.modalController.create({
+      component: ModalCompletar,
+      componentProps: { tarea },
+      breakpoints: [0, 0.85, 0.95],
+      initialBreakpoint: 0.85
+    });
+
+    modal.onDidDismiss().then((result) => {
+      if (result.role === 'confirm' && result.data) {
+        this.tareasService.finalizarTarea(tarea.id, result.data.observaciones, result.data.imagen)
+          .pipe(takeUntil(this.destroy$))
+          .subscribe({
+            next: (response) => {
+              this.toastService.success('Tarea completada correctamente');
+              this.cargarTareas();
+            },
+            error: (err) => {
+              console.error('Error finalizando tarea:', err);
+              this.toastService.error('Error al completar la tarea');
+            }
+          });
+      }
+    });
+
+    await modal.present();
+  }
+
+  // Toggle selección de tarea para auto-asignación
+  toggleSeleccionTarea(tareaId: string): void {
+    if (this.tareasSeleccionadas.has(tareaId)) {
+      this.tareasSeleccionadas.delete(tareaId);
+    } else {
+      this.tareasSeleccionadas.add(tareaId);
+    }
+    this.cdr.markForCheck();
+  }
+
+  // Verificar si una tarea está seleccionada
+  isTareaSeleccionada(tareaId: string): boolean {
+    return this.tareasSeleccionadas.has(tareaId);
   }
 
   actualizarResumen(): void {
@@ -227,6 +523,9 @@ export class Tareas implements OnInit, OnDestroy {
   actualizarFecha(): void {
     this.diaString = this.formatearFecha(this.dia);
     this.nroSemana = this.calcularNumeroSemana(this.dia);
+    this.fechaSeleccionadaISO = this.dia.toISOString();
+    // Recargar tareas al cambiar fecha
+    this.cargarTareas();
     this.cdr.markForCheck();
   }
 
@@ -264,10 +563,14 @@ export class Tareas implements OnInit, OnDestroy {
   irAHoy(): void {
     this.dia = new Date();
     this.actualizarFecha();
+    this.generarSemana();
   }
 
   obtenerTareasFiltradas(): TareaAdmin[] {
     let tareas = this.tareasAdmin;
+
+    // El filtrado por fecha ya se hace en backend
+    // Aquí solo filtramos los campos adicionales en frontend
 
     if (this.filtroEstado !== 'todos') {
       tareas = tareas.filter(t => t.estado === this.filtroEstado);
@@ -313,7 +616,107 @@ export class Tareas implements OnInit, OnDestroy {
   }
 
   verDetallesTarea(tarea: TareaAdmin): void {
-    this.router.navigate(['/features/tareas', tarea.id], { state: { tarea } });
+    // Si la tarea está completada, mostrar opción de reapertura
+    if (tarea.estado === 'Completada') {
+      this.mostrarOpcionesTareaCompletada(tarea);
+    } else {
+      // Si está pendiente o en progreso, ir a detalles
+      this.router.navigate(['/features/tareas/info'], { 
+        queryParams: { tareaId: tarea.id }
+      });
+    }
+  }
+
+  // Mostrar opciones para tarea completada
+  async mostrarOpcionesTareaCompletada(tarea: TareaAdmin): Promise<void> {
+    const modal = await this.modalController.create({
+      component: ModalReaperturar,
+      componentProps: {
+        tarea: tarea,
+        accion: 'reaperturar'
+      },
+      breakpoints: [0, 0.5, 0.75, 1],
+      initialBreakpoint: 0.75
+    });
+
+    modal.onDidDismiss().then((result) => {
+      if (result.role === 'confirm' && result.data) {
+        // Procesar reapertura
+        this.procesarReapertura(tarea.id, result.data);
+      }
+    });
+
+    await modal.present();
+  }
+
+  // Procesar reapertura de tarea
+  procesarReapertura(tareaId: string, datos: any): void {
+    console.log('Reaperturando tarea:', tareaId, datos);
+    // TODO: Llamar al servicio para reaperturar
+    this.tareasService.actualizarTareaAdmin(tareaId, { 
+      estado: 'Pendiente',
+      motivoReapertura: datos.motivo,
+      observacionesReapertura: datos.observaciones
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.cargarTareas();
+        },
+        error: (err) => console.error('Error al reaperturar:', err)
+      });
+  }
+
+  // Abrir modal para completar tarea
+  async abrirModalCompletar(tarea: TareaAdmin, event?: Event): Promise<void> {
+    if (event) {
+      event.stopPropagation();
+    }
+
+    const modal = await this.modalController.create({
+      component: ModalCompletar,
+      componentProps: {
+        tarea: tarea
+      },
+      breakpoints: [0, 0.5, 0.85, 1],
+      initialBreakpoint: 0.85
+    });
+
+    modal.onDidDismiss().then((result) => {
+      if (result.role === 'confirm' && result.data) {
+        this.procesarCompletarTarea(tarea.id, result.data);
+      }
+    });
+
+    await modal.present();
+  }
+
+  // Procesar completar tarea
+  procesarCompletarTarea(tareaId: string, datos: any): void {
+    console.log('Completando tarea:', tareaId, datos);
+    this.tareasService.actualizarTareaAdmin(tareaId, { 
+      estado: 'Completada',
+      observaciones: datos.observaciones,
+      imagenes: datos.imagenes,
+      fechaCompletado: datos.fechaCompletado
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.cargarTareas();
+        },
+        error: (err) => console.error('Error al completar:', err)
+      });
+  }
+
+  // Ver información de tarea (sin importar estado)
+  irAInfoTarea(tarea: TareaAdmin, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.router.navigate(['/features/tareas/info'], { 
+      queryParams: { tareaId: tarea.id }
+    });
   }
 
   obtenerCategorias(): string[] {

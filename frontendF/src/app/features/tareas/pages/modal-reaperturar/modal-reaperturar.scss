@@ -1,0 +1,42 @@
+:host {
+  --background: white;
+}
+
+ion-content {
+  --background: white;
+}
+
+ion-textarea {
+  --background: #f9fafb;
+  --border-radius: 8px;
+  --padding-start: 12px;
+  --padding-end: 12px;
+}
+
+ion-toggle {
+  --background: #e5e7eb;
+  --background-checked: #3b82f6;
+  --handle-background: white;
+  --handle-background-checked: white;
+}
+
+ion-select {
+  --background: #f9fafb;
+  --padding-start: 12px;
+  --padding-end: 12px;
+  --padding-top: 12px;
+  --padding-bottom: 12px;
+  width: 100%;
+  min-height: 48px;
+}
+
+ion-button {
+  --border-radius: 8px;
+  font-weight: 500;
+  min-height: 44px;
+}
+
+ion-footer ion-toolbar {
+  --background: white;
+  --border-width: 0;
+}

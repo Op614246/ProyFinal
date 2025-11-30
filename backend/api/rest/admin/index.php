@@ -19,6 +19,8 @@ error_log('DEBUG: admin/index.php ejecutándose', 3, __DIR__ . '/debug.log');
 // Cargar configuración base (incluye autoload con PSR-4, dotenv y crea $app)
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../controllers/TaskAdminController.php';
+require_once __DIR__ . '/../../controllers/SubtareaController.php';
+require_once __DIR__ . '/../../repository/SubtareaRepository.php';
 
 // ============================================
 // CORS
@@ -52,15 +54,6 @@ $app->get('/', function () use ($app) {
 });
 
 /**
- * GET /:id
- * Obtener tarea admin específica
- */
-$app->get('/:id', function ($tareaId) use ($app) {
-    $controller = new TaskAdminController($app);
-    $controller->getTareaAdminById($tareaId);
-});
-
-/**
  * GET /fecha/:fecha
  * Obtener tareas admin por fecha (YYYY-MM-DD)
  */
@@ -79,6 +72,42 @@ $app->post('/', function () use ($app) {
 });
 
 /**
+ * POST /:id/asignar
+ * Auto-asignar tarea al usuario autenticado
+ */
+$app->post('/:id/asignar', function ($tareaId) use ($app) {
+    $controller = new TaskAdminController($app);
+    $controller->asignarTarea($tareaId);
+});
+
+/**
+ * POST /:id/completar
+ * Completar tarea con observaciones y evidencia
+ */
+$app->post('/:id/completar', function ($tareaId) use ($app) {
+    $controller = new TaskAdminController($app);
+    $controller->completarTarea($tareaId);
+});
+
+/**
+ * PUT /:id/iniciar
+ * Iniciar tarea (cambiar a 'En progreso')
+ */
+$app->put('/:id/iniciar', function ($tareaId) use ($app) {
+    $controller = new TaskAdminController($app);
+    $controller->iniciarTarea($tareaId);
+});
+
+/**
+ * PUT /:id/reabrir
+ * Reabrir tarea completada
+ */
+$app->put('/:id/reabrir', function ($tareaId) use ($app) {
+    $controller = new TaskAdminController($app);
+    $controller->reabrirTarea($tareaId);
+});
+
+/**
  * PUT /:id
  * Actualizar tarea admin
  */
@@ -94,6 +123,37 @@ $app->put('/:id', function ($tareaId) use ($app) {
 $app->delete('/:id', function ($tareaId) use ($app) {
     $controller = new TaskAdminController($app);
     $controller->deleteTareaAdmin($tareaId);
+});
+
+/**
+ * GET /:id
+ * Obtener tarea admin específica (AL FINAL para que no capture otras rutas)
+ */
+$app->get('/:id', function ($tareaId) use ($app) {
+    $controller = new TaskAdminController($app);
+    $controller->getTareaAdminById($tareaId);
+});
+
+// ============================================
+// RUTAS - SUBTAREAS DE UNA TAREA
+// ============================================
+
+/**
+ * GET /:taskId/subtareas
+ * Obtener subtareas de una tarea
+ */
+$app->get('/:taskId/subtareas', function ($taskId) use ($app) {
+    $controller = new SubtareaController($app);
+    $controller->getSubtareasByTask($taskId);
+});
+
+/**
+ * POST /:taskId/subtareas
+ * Crear nueva subtarea en una tarea
+ */
+$app->post('/:taskId/subtareas', function ($taskId) use ($app) {
+    $controller = new SubtareaController($app);
+    $controller->crearSubtarea($taskId);
 });
 
 // ============================================

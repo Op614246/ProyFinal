@@ -1,25 +1,12 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    
-    # Permitir peticiones OPTIONS sin pasar a PHP (CORS preflight)
-    RewriteCond %{REQUEST_METHOD} OPTIONS
-    RewriteRule ^ - [L]
-    
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^ index.php [QSA,L]
 </IfModule>
 
-# Permitir que Apache pase headers personalizados a PHP
+# Pasar headers a PHP
 <IfModule mod_setenvif.c>
     SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
     SetEnvIf X-API-KEY "(.*)" HTTP_X_API_KEY=$1
-</IfModule>
-
-# Habilitar mod_headers si está disponible
-<IfModule mod_headers.c>
-    Header always set Access-Control-Allow-Origin "*"
-    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-    Header always set Access-Control-Allow-Headers "Authorization, Content-Type, X-API-KEY, Accept"
-    Header always set Access-Control-Max-Age "3600"
 </IfModule>

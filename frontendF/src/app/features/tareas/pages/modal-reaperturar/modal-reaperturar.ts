@@ -72,16 +72,4 @@ export class ModalReaperturar implements OnInit {
 
     this.modalController.dismiss(resultado, 'confirm');
   }
-
-  async abrirModalCargo() {
-    // Simular selección de cargo
-    const cargos = ['Mesero', 'Supervisor', 'Jefe de Área', 'Coordinador'];
-    this.cargoSeleccionado = cargos[Math.floor(Math.random() * cargos.length)];
-  }
-
-  async abrirModalUsuario() {
-    // Simular selección de usuario
-    const usuarios = ['Juan Pérez', 'María García', 'Carlos López', 'Ana Martínez'];
-    this.usuarioSeleccionado = usuarios[Math.floor(Math.random() * usuarios.length)];
-  }
 }

@@ -1,6 +1,5 @@
 import { NgModule, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from '@angular/core';
 import { BrowserModule, provideClientHydration, withEventReplay } from '@angular/platform-browser';
-import { HttpClientModule } from '@angular/common/http';
 import { IonicModule } from '@ionic/angular';
 
 import { provideIonicAngular } from '@ionic/angular/standalone';
@@ -17,8 +16,7 @@ import { FeaturesModule } from './features/features-module';
   imports: [
     BrowserModule,
     AppRoutingModule,
-    HttpClientModule,
-    CoreModule,
+    CoreModule,  // CoreModule exporta HttpClientModule con el interceptor
     FeaturesModule,
     IonicModule
   ],

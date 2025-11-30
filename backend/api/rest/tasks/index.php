@@ -76,6 +76,36 @@ $app->get('/', function () use ($app) {
 });
 
 /**
+ * GET /statistics
+ * 
+ * Obtiene estadísticas de tareas (SOLO ADMIN).
+ */
+$app->get('/statistics', function () use ($app) {
+    $taskController = new TaskController($app);
+    $taskController->getStatistics();
+});
+
+/**
+ * GET /available
+ * 
+ * Obtiene tareas disponibles para auto-asignación (solo del día actual).
+ */
+$app->get('/available', function () use ($app) {
+    $taskController = new TaskController($app);
+    $taskController->getAvailable();
+});
+
+/**
+ * GET /users
+ * 
+ * Obtiene usuarios disponibles para asignación (SOLO ADMIN).
+ */
+$app->get('/users', function () use ($app) {
+    $taskController = new TaskController($app);
+    $taskController->getAvailableUsers();
+});
+
+/**
  * POST /
  * 
  * Crea una nueva tarea (SOLO ADMIN).
@@ -269,6 +299,32 @@ $app->put('/:id/status', function ($id) use ($app) {
 $app->delete('/:id', function ($id) use ($app) {
     $taskController = new TaskController($app);
     $taskController->delete($id);
+});
+
+/**
+ * PUT /:id/reopen
+ * 
+ * Reabre una tarea completada o incompleta (SOLO ADMIN).
+ * 
+ * Headers requeridos:
+ *   X-API-Key: <api_key>
+ *   Authorization: Bearer <jwt_token>
+ * 
+ * Body (encriptado AES-256):
+ * {
+ *   "motivo": "Razón de la reapertura",
+ *   "observaciones": "Notas adicionales opcionales"
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "message": "Tarea reabierta exitosamente"
+ * }
+ */
+$app->put('/:id/reopen', function ($id) use ($app) {
+    $taskController = new TaskController($app);
+    $taskController->reopen($id);
 });
 
 // ============================================

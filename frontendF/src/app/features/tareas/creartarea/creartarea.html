@@ -38,62 +38,96 @@
       </ion-textarea>
     </div>
     
-    <div class="flex gap-4">
-      <!-- Tipo de asignación -->
-      <div class="space-y-1 w-full">
-        <label class="block text-xs text-gray-600 font-normal">Tipo de asignación</label>
-        <ion-select
-          [(ngModel)]="tipoAsignacion"
-          placeholder="Asignar por cargo"
-          fill="outline"
-          interface="popover"
-          class="text-xs"
-          (ionChange)="onTipoAsignacionChange()">
-          <ion-select-option value="cargo">Asignar por cargo</ion-select-option>
-          <ion-select-option value="usuario">Asignar por usuario</ion-select-option>
-        </ion-select>
+    <!-- Toggle de asignación -->
+    <div class="space-y-1 bg-white p-3 rounded-lg border border-gray-200">
+      <div class="flex items-center justify-between">
+        <div>
+          <label class="block text-sm text-gray-800 font-medium">Asignar a un usuario</label>
+          <span class="text-xs text-gray-500">Marcar si la tarea será asignada directamente</span>
+        </div>
+        <ion-toggle mode="ios"
+          [(ngModel)]="asignarUsuario"
+          (ionChange)="onAsignarUsuarioChange()"
+          color="primary">
+        </ion-toggle>
+      </div>
+    </div>
+    
+    <!-- Sección de asignación (solo si está activado) -->
+    <div *ngIf="asignarUsuario" class="space-y-3 bg-blue-50 p-3 rounded-lg border border-blue-200">
+      <div class="flex gap-4">
+        <!-- Tipo de asignación -->
+        <div class="space-y-1 w-full">
+          <label class="block text-xs text-gray-600 font-normal">Tipo de asignación</label>
+          <ion-select
+            [(ngModel)]="tipoAsignacion"
+            placeholder="Asignar por usuario"
+            fill="outline"
+            interface="popover"
+            class="text-xs bg-white"
+            (ionChange)="onTipoAsignacionChange()">
+            <ion-select-option value="usuario">Asignar por usuario</ion-select-option>
+            <ion-select-option value="cargo">Filtrar por cargo</ion-select-option>
+          </ion-select>
+        </div>
+
+        <!-- Cargo (cuando tipo es cargo) -->
+        <div class="space-y-1 w-full" *ngIf="tipoAsignacion === 'cargo'">
+          <label class="block text-xs text-gray-600 font-normal">Cargo</label>
+          <div class="relative">
+            <div 
+              (click)="abrirModalCargo()"
+              class="flex items-center justify-between p-3 border border-gray-300 rounded-lg bg-white cursor-pointer min-h-[44px]">
+              <span class="text-xs">{{cargoSeleccionado}}</span>
+              <fa-icon [icon]="faCaretDown" class="text-sm"></fa-icon>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="space-y-1 w-full">
-        <label class="block text-xs text-gray-600 font-normal">Cargo</label>
+      <!-- Usuario -->
+      <div class="space-y-1">
+        <label class="block text-xs text-gray-600 font-normal">Usuario</label>
         <div class="relative">
           <div 
-            (click)="abrirModalCargo()"
+            (click)="abrirModalUsuario()"
             class="flex items-center justify-between p-3 border border-gray-300 rounded-lg bg-white cursor-pointer min-h-[44px]">
-            <span class="text-xs">{{cargoSeleccionado}}</span>
+            <span class="text-sm" [class.text-gray-400]="usuario === 'Seleccionar usuario'">{{usuario}}</span>
             <fa-icon [icon]="faCaretDown" class="text-sm"></fa-icon>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Usuario (solo cuando tipo asignación es usuario) -->
-    <div class="space-y-1" *ngIf="tipoAsignacion === 'usuario'">
-      <label class="block text-xs text-gray-600 font-normal">Usuario</label>
-      <div class="relative">
-        <div 
-          (click)="abrirModalUsuario()"
-          class="flex items-center justify-between p-3 border border-gray-300 rounded-lg bg-white cursor-pointer min-h-[44px]">
-          <span class="text-sm">{{usuario}}</span>
-          <fa-icon [icon]="faCaretDown" class="text-sm"></fa-icon>
-        </div>
-      </div>
-    </div>
-
-    <!-- Subcategoría -->
+    <!-- Categoría -->
     <div class="space-y-1">
-      <label class="block text-xs text-gray-600 font-normal">Subcategoría</label>
+      <label class="block text-xs text-gray-600 font-normal">Categoría</label>
       <ion-select
-        [(ngModel)]="subcategoria"
-        placeholder="Seleccionar"
+        [(ngModel)]="categoriaSeleccionadaId"
+        placeholder="Seleccionar categoría"
         fill="outline"
         interface="popover"
-        class="text-xs">
-        <ion-select-option value="operaciones">Operaciones</ion-select-option>
-        <ion-select-option value="limpieza">Limpieza</ion-select-option>
-        <ion-select-option value="inventario">Inventario</ion-select-option>
-        <ion-select-option value="atencion">Atención al cliente</ion-select-option>
-        <ion-select-option value="cocina">Cocina</ion-select-option>
+        class="text-xs"
+        (ionChange)="onCategoriaChange($event)">
+        <ion-select-option *ngFor="let cat of categorias" [value]="cat.id">
+          {{cat.nombre}}
+        </ion-select-option>
+      </ion-select>
+    </div>
+    
+    <!-- Sucursal -->
+    <div class="space-y-1">
+      <label class="block text-xs text-gray-600 font-normal">Sucursal</label>
+      <ion-select
+        [(ngModel)]="sucursalSeleccionadaId"
+        placeholder="Seleccionar sucursal"
+        fill="outline"
+        interface="popover"
+        class="text-xs"
+        (ionChange)="onSucursalChange($event)">
+        <ion-select-option *ngFor="let suc of sucursales" [value]="suc.id">
+          {{suc.nombre}}
+        </ion-select-option>
       </ion-select>
     </div>
 
@@ -121,9 +155,9 @@
           fill="outline"
           interface="popover"
           class="text-xs">
-          <ion-select-option value="alta">Alta</ion-select-option>
-          <ion-select-option value="media">Media</ion-select-option>
-          <ion-select-option value="baja">Baja</ion-select-option>
+          <ion-select-option value="high">Alta</ion-select-option>
+          <ion-select-option value="medium">Media</ion-select-option>
+          <ion-select-option value="low">Baja</ion-select-option>
         </ion-select>
       </div>
     </div>

@@ -1,61 +1,77 @@
-<div class="p-4">
+<ion-header>
   <ion-toolbar>
-    <ion-title class="text-center font-bold">Reaperturar tarea</ion-title>
+    <ion-title class="text-base font-semibold">Reaperturar tarea</ion-title>
     <ion-buttons slot="end">
       <ion-button (click)="onDismiss()">
-        <fa-icon [icon]="faXmark" class="text-gray-500"></fa-icon>
+        <fa-icon [icon]="faXmark" class="text-gray-500 text-xl"></fa-icon>
       </ion-button>
     </ion-buttons>
   </ion-toolbar>
-</div>
+</ion-header>
 
 <ion-content class="ion-padding">
-  <div class="space-y-4">
+  <div class="space-y-5 px-2">
     <!-- Motivo -->
     <div>
-      <ion-label class="text-sm font-medium text-gray-700">Motivo de reapertura *</ion-label>
+      <label class="block text-sm font-medium text-gray-700 mb-2">
+        Motivo de reapertura <span class="text-red-500">*</span>
+      </label>
       <ion-textarea
         [(ngModel)]="motivo"
         placeholder="Escribe el motivo por el cual deseas reaperturar esta tarea..."
         rows="4"
-        class="mt-2 border rounded-lg p-2">
+        fill="outline"
+        mode="md">
       </ion-textarea>
     </div>
 
     <!-- Toggle reasignar -->
-    <div class="flex items-center justify-between">
-      <ion-label class="text-sm font-medium text-gray-700">¿Reasignar tarea?</ion-label>
-      <ion-toggle [(ngModel)]="reasignarTarea" (ionChange)="onToggleChange()"></ion-toggle>
+    <div class="flex items-center justify-between py-2">
+      <label class="text-sm font-medium text-gray-700">¿Reasignar tarea?</label>
+      <ion-toggle [(ngModel)]="reasignarTarea" (ionChange)="onToggleChange()" mode="ios"></ion-toggle>
     </div>
 
     <!-- Campos de reasignación -->
-    <div *ngIf="reasignarTarea" class="space-y-3 pl-2 border-l-2 border-blue-300">
+    <div *ngIf="reasignarTarea" class="space-y-4 pl-4 border-l-2 border-blue-400">
       <!-- Selección de cargo -->
-      <div (click)="abrirModalCargo()" class="cursor-pointer p-3 bg-gray-50 rounded-lg flex justify-between items-center">
-        <div>
-          <span class="text-xs text-gray-500">Cargo</span>
-          <p class="text-sm font-medium">{{cargoSeleccionado || 'Seleccionar cargo'}}</p>
-        </div>
-        <ion-icon name="chevron-forward-outline" class="text-gray-400"></ion-icon>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Cargo</label>
+        <ion-select 
+          [(ngModel)]="cargoSeleccionado" 
+          placeholder="Seleccionar cargo"
+          interface="action-sheet"
+          mode="ios"
+          class="w-full border border-gray-300 rounded-lg">
+          <ion-select-option value="mesero">Mesero</ion-select-option>
+          <ion-select-option value="supervisor">Supervisor</ion-select-option>
+          <ion-select-option value="jefe_area">Jefe de Área</ion-select-option>
+          <ion-select-option value="coordinador">Coordinador</ion-select-option>
+        </ion-select>
       </div>
 
       <!-- Selección de usuario -->
-      <div (click)="abrirModalUsuario()" class="cursor-pointer p-3 bg-gray-50 rounded-lg flex justify-between items-center">
-        <div>
-          <span class="text-xs text-gray-500">Usuario</span>
-          <p class="text-sm font-medium">{{usuarioSeleccionado || 'Seleccionar usuario'}}</p>
-        </div>
-        <ion-icon name="chevron-forward-outline" class="text-gray-400"></ion-icon>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Usuario</label>
+        <ion-select 
+          [(ngModel)]="usuarioSeleccionado" 
+          placeholder="Seleccionar usuario"
+          interface="action-sheet"
+          mode="ios"
+          class="w-full border border-gray-300 rounded-lg">
+          <ion-select-option value="juan">Juan Pérez</ion-select-option>
+          <ion-select-option value="maria">María García</ion-select-option>
+          <ion-select-option value="carlos">Carlos López</ion-select-option>
+          <ion-select-option value="ana">Ana Martínez</ion-select-option>
+        </ion-select>
       </div>
     </div>
   </div>
 </ion-content>
 
-<ion-footer>
+<ion-footer class="ion-no-border">
   <ion-toolbar>
     <div class="p-4 flex gap-3">
       <ion-button fill="outline" color="medium" expand="block" class="flex-1" (click)="cancelar()">
-        <fa-icon [icon]="faXmark" class="mr-2"></fa-icon>
         Cancelar
       </ion-button>
       <ion-button fill="solid" color="primary" expand="block" class="flex-1" 

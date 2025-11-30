@@ -165,8 +165,8 @@ class TaskController
             $data['priority'] = trim($data['priority']);
             $data['deadline'] = trim($data['deadline']);
 
-            // Crear tarea
-            $taskId = $this->repository->create($data);
+            // Crear tarea (pasamos el ID del usuario que crea)
+            $taskId = $this->repository->create($data, $userData['id']);
 
             if ($taskId) {
                 Logger::info('Tarea creada', [
@@ -242,7 +242,7 @@ class TaskController
                     return $this->sendResponse($this->validator->userNotFound());
                 }
 
-                $result = $this->repository->assign($taskId, $targetUserId);
+                $result = $this->repository->assign($taskId, $targetUserId, $userData['id']);
 
                 if ($result) {
                     $username = $this->repository->getUsernameById($targetUserId);
@@ -262,7 +262,7 @@ class TaskController
                     return $this->sendResponse($this->validator->alreadyAssigned());
                 }
 
-                $result = $this->repository->assign($taskId, $userData['id']);
+                $result = $this->repository->assign($taskId, $userData['id'], $userData['id']);
 
                 if ($result) {
                     Logger::info('Usuario se auto-asignó tarea', [
@@ -337,27 +337,61 @@ class TaskController
                 return $this->sendResponse($this->validator->cannotComplete());
             }
 
-            // Validar imagen de evidencia
-            if (!isset($_FILES['evidence']) || empty($_FILES['evidence']['tmp_name'])) {
-                $this->validator->addError("La imagen de evidencia es requerida para completar la tarea.");
-                return $this->sendResponse($this->validator->imageValidationError());
+            // Validar imagen de evidencia (opcional ahora)
+            $hasImage = isset($_FILES['evidence']) && !empty($_FILES['evidence']['tmp_name']);
+            $observaciones = isset($_POST['observaciones']) ? trim($_POST['observaciones']) : '';
+
+            // Requerimos al menos observaciones
+            if (empty($observaciones) && !$hasImage) {
+                return $this->sendResponse([
+                    'tipo' => 0,
+                    'mensajes' => ['Debe proporcionar observaciones y/o imagen de evidencia.'],
+                    'data' => null
+                ]);
             }
 
-            $file = $_FILES['evidence'];
+            $evidencePath = null;
 
-            if (!$this->validator->validateCompletionImage($file)) {
-                return $this->sendResponse($this->validator->imageValidationError());
+            if ($hasImage) {
+                $file = $_FILES['evidence'];
+
+                // Validar tamaño máximo 1.5 MB
+                $maxSizeKb = 1536; // 1.5 MB en KB
+                $fileSizeKb = $file['size'] / 1024;
+
+                if ($fileSizeKb > $maxSizeKb) {
+                    return $this->sendResponse([
+                        'tipo' => 0,
+                        'mensajes' => ['La imagen no puede exceder 1.5 MB.'],
+                        'data' => null
+                    ]);
+                }
+
+                if (!$this->validator->validateCompletionImage($file)) {
+                    return $this->sendResponse($this->validator->imageValidationError());
+                }
+
+                // Procesar y guardar imagen
+                $evidencePath = $this->saveEvidenceImage($file, $taskId, $userData['id']);
+
+                if (!$evidencePath) {
+                    return $this->sendResponse($this->validator->imageUploadError());
+                }
+
+                // Guardar en task_evidence también
+                $this->repository->addEvidence(
+                    $taskId,
+                    $userData['id'],
+                    $evidencePath,
+                    $file['name'],
+                    (int)$fileSizeKb,
+                    $file['type'],
+                    $observaciones
+                );
             }
 
-            // Procesar y guardar imagen
-            $evidencePath = $this->saveEvidenceImage($file, $taskId, $userData['id']);
-
-            if (!$evidencePath) {
-                return $this->sendResponse($this->validator->imageUploadError());
-            }
-
-            // Completar tarea
-            $result = $this->repository->complete($taskId, $evidencePath);
+            // Completar tarea con observaciones
+            $result = $this->repository->complete($taskId, $userData['id'], $observaciones, $evidencePath);
 
             if ($result) {
                 Logger::info('Tarea completada', [
@@ -552,8 +586,8 @@ class TaskController
                 return $this->sendResponse($this->validator->cannotDeleteCompleted());
             }
 
-            // Eliminar tarea
-            $result = $this->repository->delete($taskId);
+            // Eliminar tarea (soft delete - marca como inactive)
+            $result = $this->repository->delete($taskId, $userData['id']);
 
             if ($result) {
                 Logger::info('Tarea eliminada', [
@@ -574,6 +608,202 @@ class TaskController
                 'error' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            ]);
+            return $this->sendResponse($this->validator->serverError());
+        }
+    }
+
+    /**
+     * PUT /:id/reopen
+     * Reabre una tarea completada o incompleta (solo Admin)
+     */
+    public function reopen($taskId)
+    {
+        try {
+            $userData = $this->getAuthenticatedUser();
+
+            if (!$userData) {
+                return $this->sendResponse($this->validator->invalidSession());
+            }
+
+            // Solo admin puede reabrir tareas
+            if ($userData['role'] !== 'admin') {
+                Logger::warning('Intento de reabrir tarea sin permisos', [
+                    'user_id' => $userData['id'],
+                    'task_id' => $taskId,
+                    'role' => $userData['role'],
+                    'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+                ]);
+                return $this->sendResponse($this->validator->adminRequired());
+            }
+
+            $taskId = (int)$taskId;
+
+            // Verificar que la tarea existe
+            $task = $this->repository->getById($taskId);
+
+            if (!$task) {
+                return $this->sendResponse($this->validator->taskNotFound());
+            }
+
+            // Solo se pueden reabrir tareas completadas o incompletas
+            $allowedStatuses = ['completed', 'incomplete'];
+            if (!in_array($task['status'], $allowedStatuses)) {
+                return $this->sendResponse([
+                    'tipo' => 0,
+                    'mensajes' => ['Solo se pueden reabrir tareas completadas o incompletas.'],
+                    'data' => null
+                ]);
+            }
+
+            // Obtener datos de reapertura
+            $data = $this->getDecryptedRequestData();
+
+            if (!$data || empty($data['motivo'])) {
+                return $this->sendResponse([
+                    'tipo' => 0,
+                    'mensajes' => ['El motivo de reapertura es requerido.'],
+                    'data' => null
+                ]);
+            }
+
+            $motivo = trim($data['motivo']);
+            $observaciones = isset($data['observaciones']) ? trim($data['observaciones']) : null;
+
+            // Reabrir tarea
+            $result = $this->repository->reopen($taskId, $userData['id'], $motivo, $observaciones);
+
+            if ($result) {
+                Logger::info('Tarea reabierta', [
+                    'task_id' => $taskId,
+                    'previous_status' => $task['status'],
+                    'motivo' => $motivo,
+                    'reopened_by' => $userData['username'],
+                    'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+                ]);
+
+                return $this->sendResponse([
+                    'tipo' => 1,
+                    'mensajes' => ['Tarea reabierta exitosamente.'],
+                    'data' => [
+                        'task_id' => $taskId,
+                        'new_status' => 'pending',
+                        'reopened_at' => date('Y-m-d H:i:s')
+                    ]
+                ]);
+            }
+
+            return $this->sendResponse([
+                'tipo' => 0,
+                'mensajes' => ['Error al reabrir la tarea.'],
+                'data' => null
+            ]);
+
+        } catch (Exception $e) {
+            Logger::error('Error al reabrir tarea', [
+                'task_id' => $taskId ?? 'unknown',
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            ]);
+            return $this->sendResponse($this->validator->serverError());
+        }
+    }
+
+    /**
+     * GET /statistics
+     * Obtiene estadísticas de tareas
+     */
+    public function getStatistics()
+    {
+        try {
+            $userData = $this->getAuthenticatedUser();
+
+            if (!$userData) {
+                return $this->sendResponse($this->validator->invalidSession());
+            }
+
+            $isAdmin = $userData['role'] === 'admin';
+            
+            // Admin ve todas las estadísticas, usuario solo las suyas
+            $userId = $isAdmin ? null : $userData['id'];
+            $stats = $this->repository->getStatistics($userId);
+
+            return $this->sendResponse([
+                'tipo' => 1,
+                'mensajes' => ['Estadísticas obtenidas exitosamente.'],
+                'data' => $stats
+            ]);
+
+        } catch (Exception $e) {
+            Logger::error('Error al obtener estadísticas', [
+                'error' => $e->getMessage(),
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            ]);
+            return $this->sendResponse($this->validator->serverError());
+        }
+    }
+
+    /**
+     * GET /available
+     * Obtiene tareas disponibles para auto-asignación (solo del día actual)
+     */
+    public function getAvailable()
+    {
+        try {
+            $userData = $this->getAuthenticatedUser();
+
+            if (!$userData) {
+                return $this->sendResponse($this->validator->invalidSession());
+            }
+
+            $tasks = $this->repository->getAvailableTasksForToday();
+
+            return $this->sendResponse([
+                'tipo' => 1,
+                'mensajes' => [count($tasks) . ' tareas disponibles para hoy.'],
+                'data' => $tasks
+            ]);
+
+        } catch (Exception $e) {
+            Logger::error('Error al obtener tareas disponibles', [
+                'error' => $e->getMessage(),
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            ]);
+            return $this->sendResponse($this->validator->serverError());
+        }
+    }
+
+    /**
+     * GET /users
+     * Obtiene usuarios disponibles para asignación (solo Admin)
+     */
+    public function getAvailableUsers()
+    {
+        try {
+            $userData = $this->getAuthenticatedUser();
+
+            if (!$userData) {
+                return $this->sendResponse($this->validator->invalidSession());
+            }
+
+            if ($userData['role'] !== 'admin') {
+                return $this->sendResponse($this->validator->adminRequired());
+            }
+
+            $users = $this->repository->getAvailableUsers();
+
+            return $this->sendResponse([
+                'tipo' => 1,
+                'mensajes' => [count($users) . ' usuarios disponibles.'],
+                'data' => $users
+            ]);
+
+        } catch (Exception $e) {
+            Logger::error('Error al obtener usuarios', [
+                'error' => $e->getMessage(),
                 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
             ]);
             return $this->sendResponse($this->validator->serverError());
@@ -694,12 +924,11 @@ class TaskController
      */
     private function sendResponse(array $responseData): void
     {
-        $response = $this->app->response();
-        $response->headers->set('Content-Type', 'application/json');
-        $response->body(json_encode([
+        $this->app->contentType('application/json; charset=utf-8');
+        echo json_encode([
             'tipo' => $responseData['tipo'],
             'mensajes' => $responseData['mensajes'],
             'data' => $responseData['data'] ?? null
-        ], JSON_UNESCAPED_UNICODE));
+        ], JSON_UNESCAPED_UNICODE);
     }
 }

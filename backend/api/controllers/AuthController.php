@@ -491,6 +491,7 @@ class AuthController {
 
         $responseData = [
             'token' => $jwtToken,
+            'id' => $user['id'],
             'role' => $user['role'],
             'username' => $usernameDisplay
         ];

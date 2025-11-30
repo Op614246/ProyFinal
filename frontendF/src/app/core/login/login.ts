@@ -4,14 +4,13 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 import { TokenService } from '../services/token.service';
-import { ToastService } from '../../shared/services/toast.service';
+import { ToastService } from '../services/toast.service';
 
 @Component({
   selector: 'app-login',
   standalone: false,
   templateUrl: './login.html',
   styleUrl: './login.scss',
-  providers: [ToastService],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class Login implements OnInit, OnDestroy {
@@ -31,10 +30,7 @@ export class Login implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    // Limpiar cualquier dato anterior al cargar el login
-    this.tokenService.clear();
-    
-    // Crear formulario vacío
+    // Crear formulario vacío - siempre limpio al cargar
     this.loginForm = this.fb.group({
       username: ['', [Validators.required, Validators.minLength(3)]],
       password: ['', [Validators.required, Validators.minLength(6)]]
@@ -42,6 +38,11 @@ export class Login implements OnInit, OnDestroy {
 
     // Obtener URL de retorno si existe
     this.returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/features/tareas';
+    
+    // Si ya está autenticado, redirigir
+    if (this.tokenService.isLoggedIn()) {
+      this.router.navigate([this.returnUrl]);
+    }
     
     this.cdr.markForCheck();
   }
@@ -57,7 +58,7 @@ export class Login implements OnInit, OnDestroy {
   onSubmit(): void {
     if (this.loginForm.invalid) {
       this.markFormTouched();
-      this.toastService.presentToast('Por favor, complete todos los campos.', 'warning');
+      this.toastService.warning('Por favor, complete todos los campos.');
       return;
     }
 
@@ -76,7 +77,7 @@ export class Login implements OnInit, OnDestroy {
           
           if (response.tipo === 1) {
             // Login exitoso
-            this.toastService.presentToast(response.mensajes[0] || 'Bienvenido', 'success');
+            this.toastService.success(response.mensajes[0] || 'Bienvenido');
             
             // Redirigir después de un pequeño delay para mostrar el mensaje
             setTimeout(() => {
@@ -102,10 +103,10 @@ export class Login implements OnInit, OnDestroy {
   private showErrors(messages: string[]): void {
     if (messages && messages.length > 0) {
       messages.forEach(msg => {
-        this.toastService.presentToast(msg, 'danger');
+        this.toastService.error(msg);
       });
     } else {
-      this.toastService.presentToast('Error desconocido', 'danger');
+      this.toastService.error('Error desconocido');
     }
   }
 
