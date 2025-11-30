@@ -5,6 +5,7 @@ import { takeUntil } from 'rxjs/operators';
 import { ActivatedRoute, Router } from '@angular/router';
 import { faFlag, faSliders, faPlus } from '@fortawesome/pro-regular-svg-icons';
 import { ModalController, ToastController, AlertController } from '@ionic/angular';
+import { environment } from '../../../../environments/environment';
 import { ModalForm } from '../modal-form/modal-form';
 import { ModalCompletar } from '../pages/modal-completar/modal-completar';
 import { ModalFiltros } from '../pages/modal-filtros/modal-filtros';
@@ -44,6 +45,43 @@ export class TareasInfo implements OnInit {
   // Función para determinar si una subtarea está activa
   isSubtareaActiva(subtarea: Tarea): boolean {
     return subtarea.estado === 'En progreso' || subtarea.estado === 'Completada';
+  }
+
+  // Obtener URL absoluta para evidencias
+  getEvidenceUrl(path: string): string {
+    if (!path) return '';
+    try {
+      if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    } catch (e) {
+      // noop
+    }
+    // Normalizar si viene con múltiples separadores
+    // El backend guarda rutas relativas como 'uploads/evidencias/imagen.jpg'
+    return `${environment.apiUrl}/${path}`;
+  }
+
+  // Parsear la propiedad imagenes que puede ser string JSON, lista separada o una sola ruta
+  parseImagenes(imagenes: any): string[] {
+    if (!imagenes) return [];
+    if (Array.isArray(imagenes)) return imagenes;
+    if (typeof imagenes === 'string') {
+      const trimmed = imagenes.trim();
+      // Intentar parsear JSON
+      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) return parsed;
+          if (parsed && typeof parsed === 'object') return [parsed];
+        } catch (e) {
+          // no JSON
+        }
+      }
+      // Separadores comunes
+      if (trimmed.includes('|')) return trimmed.split('|').map(s => s.trim()).filter(Boolean);
+      if (trimmed.includes(',')) return trimmed.split(',').map(s => s.trim()).filter(Boolean);
+      return [trimmed];
+    }
+    return [];
   }
 
   constructor(
