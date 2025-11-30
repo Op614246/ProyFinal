@@ -1,4 +1,5 @@
 import { Component, OnInit, ChangeDetectorRef, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
+import { NavigationEnd } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
@@ -45,6 +46,15 @@ export class Login implements OnInit, OnDestroy {
     }
     
     this.cdr.markForCheck();
+
+    // Limpiar formulario cuando la ruta sea /login (por ejemplo tras logout)
+    this.router.events.pipe(takeUntil(this.destroy$)).subscribe(event => {
+      if (event instanceof NavigationEnd) {
+        if (event.urlAfterRedirects && event.urlAfterRedirects.indexOf('/login') !== -1) {
+          this.resetForm();
+        }
+      }
+    });
   }
 
   ngOnDestroy(): void {
@@ -79,6 +89,9 @@ export class Login implements OnInit, OnDestroy {
             // Login exitoso
             this.toastService.success(response.mensajes[0] || 'Bienvenido');
             
+            // Limpiar campos inmediatamente al iniciar sesión
+            this.resetForm();
+
             // Redirigir después de un pequeño delay para mostrar el mensaje
             setTimeout(() => {
               this.router.navigate([this.returnUrl]);
@@ -95,6 +108,21 @@ export class Login implements OnInit, OnDestroy {
           this.showErrors(error.mensajes || ['Error de conexión con el servidor']);
         }
       });
+  }
+
+  /**
+   * Resetea el formulario y marca estado limpio
+   */
+  private resetForm(): void {
+    if (this.loginForm) {
+      this.loginForm.reset({ username: '', password: '' });
+      Object.keys(this.loginForm.controls).forEach(key => {
+        const control = this.loginForm.get(key);
+        control?.markAsPristine();
+        control?.markAsUntouched();
+      });
+      this.cdr.markForCheck();
+    }
   }
 
   /**

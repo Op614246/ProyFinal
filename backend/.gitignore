@@ -4,6 +4,3 @@
 *.log
 
 /backend/test/
-
-/backend/api/migrations/
-*.php
