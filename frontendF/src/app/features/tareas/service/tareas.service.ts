@@ -138,6 +138,7 @@ export interface TareaAdmin {
   created_by_apellido: string;
   usuarioasignado?: string;
   usuarioasignado_id?: number;
+  completada?: boolean;
   Tarea: Tarea[];
   motivoReapertura?: string;
   observacionesReapertura?: string;

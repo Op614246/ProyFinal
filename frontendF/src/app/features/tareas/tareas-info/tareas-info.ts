@@ -1,9 +1,12 @@
 import { Location } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { ActivatedRoute, Router } from '@angular/router';
 import { faFlag, faSliders, faPlus } from '@fortawesome/pro-regular-svg-icons';
-import { ModalController, ToastController } from '@ionic/angular';
+import { ModalController, ToastController, AlertController } from '@ionic/angular';
 import { ModalForm } from '../modal-form/modal-form';
+import { ModalCompletar } from '../pages/modal-completar/modal-completar';
 import { ModalFiltros } from '../pages/modal-filtros/modal-filtros';
 import { ModalFiltrosAdmin } from '../pages/modal-filtros-admin/modal-filtros-admin';
 import { ModalCrearSubtarea } from '../pages/modal-crear-subtarea/modal-crear-subtarea';
@@ -20,6 +23,8 @@ import { AuthService } from '../../../core/services/auth.service';
 export class TareasInfo implements OnInit {
   public tareaAdminSeleccionada: TareaAdmin | null = null;
   public subtareas: Tarea[] = [];
+  public asignando: boolean = false;
+  comentario: string = '';
   
   // Variables de estado
   searchTerm: string = '';
@@ -48,14 +53,78 @@ export class TareasInfo implements OnInit {
     private toastController: ToastController,
     private route: ActivatedRoute,
     private router: Router,
-    private authService: AuthService
+    private authService: AuthService,
+    private alertController: AlertController,
+    private cdr: ChangeDetectorRef
   ) {
     const user = this.authService.getCurrentUser();
     this.isAdmin = user?.role === 'admin';
   }
 
+  private destroy$ = new Subject<void>();
+
   ngOnInit() {
     this.obtenerParametrosTarea();
+
+    // Subscribirse a notificaciones globales de actualización para recargar subtareas
+    this.tareasService.actualizacion$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.cargarSubtareas();
+        // Forzar detección por si la actualización viene de fuera de Angular
+        try {
+          this.cdr.detectChanges();
+        } catch (e) {
+          // noop
+        }
+      });
+  }
+
+  // Permite que un usuario no-admin se auto-asigne la tarea (Añadir a mis tareas)
+  asignarATarea(event?: Event) {
+    if (event) {
+      event.stopPropagation();
+    }
+
+    if (!this.tareaAdminSeleccionada) {
+      this.mostrarToast('No hay tarea seleccionada', 'danger');
+      return;
+    }
+
+    const tareaId = this.tareaAdminSeleccionada.id;
+    const user = this.authService.getCurrentUser();
+
+    this.asignando = true;
+    this.tareasService.autoAsignarTarea(tareaId).subscribe({
+      next: (response) => {
+        this.asignando = false;
+        if (response?.tipo === 1) {
+          // Actualizar estado localmente
+          if (user) {
+            this.tareaAdminSeleccionada!.usuarioasignado = user.username || user.id?.toString() || 'Yo';
+            this.tareaAdminSeleccionada!.usuarioasignado_id = user.id as any;
+          }
+
+          // Recargar subtareas y notificar al resto de componentes
+          this.cargarSubtareas();
+          try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+          this.tareasService.notificarActualizacion();
+          this.mostrarToast('Tarea añadida a tus tareas', 'success');
+        } else {
+          this.mostrarToast(response?.mensajes?.[0] || 'No se pudo asignar la tarea', 'danger');
+        }
+      },
+      error: (err) => {
+        console.error('Error auto-asignando tarea:', err);
+        this.asignando = false;
+        this.mostrarToast('Error al asignar la tarea', 'danger');
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   // Obtener parámetros de la tarea seleccionada
@@ -116,6 +185,7 @@ export class TareasInfo implements OnInit {
       this.tareasService.completarSubtareaAdmin(this.tareaAdminSeleccionada.id, subtareaId);
       if (this.tareaAdminSeleccionada.Tarea) {
         this.subtareas = this.tareaAdminSeleccionada.Tarea;
+        try { this.cdr.detectChanges(); } catch(e) { /* noop */ }
       }
     }
   }
@@ -125,6 +195,7 @@ export class TareasInfo implements OnInit {
       this.tareasService.descompletarSubtareaAdmin(this.tareaAdminSeleccionada.id, subtareaId);
       if (this.tareaAdminSeleccionada.Tarea) {
         this.subtareas = this.tareaAdminSeleccionada.Tarea;
+        try { this.cdr.detectChanges(); } catch(e) { /* noop */ }
       }
     }
   }
@@ -317,9 +388,11 @@ export class TareasInfo implements OnInit {
   // Cargar subtareas desde el backend
   cargarSubtareas() {
     if (!this.tareaAdminSeleccionada) return;
+    console.log('cargarSubtareas called for task', this.tareaAdminSeleccionada?.id);
     
     this.tareasService.obtenerSubtareas(this.tareaAdminSeleccionada.id).subscribe({
       next: (response) => {
+        console.log('GET /subtareas/task response', response);
         if (response.tipo === 1 && response.data) {
           this.subtareas = response.data.map((s: any) => ({
             id: s.id,
@@ -347,6 +420,14 @@ export class TareasInfo implements OnInit {
             this.tareaAdminSeleccionada.totalSubtareas = this.subtareas.length;
             this.tareaAdminSeleccionada.subtareasCompletadas = this.subtareas.filter(s => s.completada).length;
           }
+
+          // Forzar detección para asegurar que la vista refleja el cambio
+          try {
+            this.cdr.detectChanges();
+          } catch (e) {
+            // noop
+          }
+          console.log('subtareas assigned:', this.subtareas.length, 'tarea.totalSubtareas', this.tareaAdminSeleccionada?.totalSubtareas);
         }
       },
       error: (err) => {
@@ -394,5 +475,106 @@ export class TareasInfo implements OnInit {
       position: 'bottom'
     });
     await toast.present();
+  }
+
+  // Texto del botón de acción según estado de la tarea
+  textoBotonAccion(): string {
+    if (!this.tareaAdminSeleccionada) return '';
+    switch (this.tareaAdminSeleccionada.estado) {
+      case 'Pendiente': return 'Iniciar tarea';
+      case 'En progreso': return 'Finalizar tarea';
+      case 'Completada': return this.isAdmin ? 'Reaperturar tarea' : '';
+      default: return 'Iniciar tarea';
+    }
+  }
+
+  // Color del botón según estado
+  colorBotonAccion(): string {
+    if (!this.tareaAdminSeleccionada) return 'primary';
+    switch (this.tareaAdminSeleccionada.estado) {
+      case 'Pendiente': return 'primary';
+      case 'En progreso': return 'success';
+      case 'Completada': return 'warning';
+      default: return 'primary';
+    }
+  }
+
+  // Ejecuta la acción principal (iniciar / finalizar / reaperturar según estado)
+  ejecutarAccionPrincipal() {
+    if (!this.tareaAdminSeleccionada) return;
+    switch (this.tareaAdminSeleccionada.estado) {
+      case 'Pendiente':
+        this.iniciarTarea();
+        break;
+      case 'En progreso':
+        this.finalizarTarea();
+        break;
+      case 'Completada':
+        if (this.isAdmin) this.abrirModalReaperturar();
+        break;
+    }
+  }
+
+  // Llamada para iniciar tarea (cambia estado a 'En progreso')
+  iniciarTarea() {
+    if (!this.tareaAdminSeleccionada) return;
+    this.tareasService.iniciarTarea(this.tareaAdminSeleccionada.id).subscribe({
+      next: (response) => {
+        if (response.tipo === 1) {
+          this.tareaAdminSeleccionada!.estado = 'En progreso';
+          this.mostrarToast('Tarea iniciada', 'success');
+          this.tareasService.notificarActualizacion();
+          try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+        } else {
+          this.mostrarToast(response.mensajes?.[0] || 'Error al iniciar tarea', 'danger');
+        }
+      },
+      error: (err) => {
+        console.error('Error al iniciar tarea:', err);
+        this.mostrarToast('Error al iniciar la tarea', 'danger');
+      }
+    });
+  }
+
+  // Llamada para finalizar tarea (pide confirmación)
+  async finalizarTarea() {
+    if (!this.tareaAdminSeleccionada) return;
+
+    const modal = await this.modalController.create({
+      component: ModalCompletar,
+      componentProps: {
+        tarea: this.tareaAdminSeleccionada
+      },
+      breakpoints: [0, 0.5, 0.85, 1],
+      initialBreakpoint: 0.85
+    });
+
+    modal.onDidDismiss().then((result) => {
+      if (result.role === 'confirm' && result.data) {
+        const datos = result.data;
+        this.tareasService.finalizarTarea(this.tareaAdminSeleccionada!.id, datos.observaciones || '', datos.imagen)
+          .subscribe({
+            next: (response) => {
+              if (response.tipo === 1) {
+                this.tareaAdminSeleccionada!.estado = 'Completada';
+                this.tareaAdminSeleccionada!.completada = true;
+                this.tareaAdminSeleccionada!.imagenes = datos.imagenes || this.tareaAdminSeleccionada!.imagenes;
+                this.tareaAdminSeleccionada!.fechaCompletado = datos.fechaCompletado || new Date().toISOString();
+                this.mostrarToast('Tarea finalizada exitosamente', 'success');
+                this.tareasService.notificarActualizacion();
+                try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+              } else {
+                this.mostrarToast(response.mensajes?.[0] || 'Error al finalizar tarea', 'danger');
+              }
+            },
+            error: (err) => {
+              console.error('Error al finalizar tarea:', err);
+              this.mostrarToast('Error al finalizar la tarea', 'danger');
+            }
+          });
+      }
+    });
+
+    await modal.present();
   }
 }

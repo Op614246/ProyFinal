@@ -517,8 +517,8 @@
       </div>
     </div>
 
-    <!-- Tab: Tareas sin asignar (para usuarios) -->
-    <div *ngIf="selectedTab === 'sin-asignar' && !isAdmin" class="space-y-4">
+    <!-- Tab: Tareas sin asignar (usuarios y admin) -->
+    <div *ngIf="selectedTab === 'sin-asignar'" class="space-y-4">
       
       <!-- Título -->
       <div class="flex justify-between items-center">
@@ -535,12 +535,11 @@
 
       <!-- Lista de tareas sin asignar -->
       <div class="space-y-3">
-        <div *ngFor="let tarea of tareasSinAsignar" 
+           <div *ngFor="let tarea of tareasSinAsignar" 
              class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 cursor-pointer"
-             [ngClass]="{'ring-2 ring-primary bg-blue-50': isTareaSeleccionada(tarea.id)}"
-             (click)="toggleSeleccionTarea(tarea.id)">
+             [ngClass]="{'ring-2 ring-primary bg-blue-50': isTareaSeleccionada(tarea.id)}">
           
-          <div class="flex justify-between items-start">
+          <div class="flex justify-between items-start" (click)="irAInfoTarea(tarea, $event)">
             <div class="flex-1">
               <h3 class="font-semibold text-sm text-gray-800 mb-2">{{ tarea.titulo }}</h3>
               <div class="grid grid-cols-2 gap-2 text-xs text-gray-600">
@@ -564,7 +563,8 @@
                  [ngClass]="{
                    'bg-primary border-primary': isTareaSeleccionada(tarea.id),
                    'border-gray-300': !isTareaSeleccionada(tarea.id)
-                 }">
+                 }"
+                 (click)="toggleSeleccionTarea(tarea.id, $event)">
               <fa-icon *ngIf="isTareaSeleccionada(tarea.id)" [icon]="faCheck" class="text-white text-xs"></fa-icon>
             </div>
           </div>
@@ -575,7 +575,7 @@
   </div>
 </ion-content>
 
-<!-- Botón fijo para añadir tareas (solo en tab sin-asignar) -->
+<!-- Botón fijo para añadir tareas (solo en tab sin-asignar para usuarios) -->
 <ion-footer class="p-4 bg-white shadow-lg" *ngIf="selectedTab === 'sin-asignar' && !isAdmin && tareasSeleccionadas.size > 0">
   <ion-button expand="block" (click)="asignarTareasSeleccionadas()">
     Añadir {{ tareasSeleccionadas.size }} tarea(s) a mi lista

@@ -1,7 +1,7 @@
 import { Component, Input, OnInit } from '@angular/core';
 import { faCheck, faXmark } from '@fortawesome/pro-regular-svg-icons';
 import { ModalController, ToastController } from '@ionic/angular';
-import { Tarea, TareaAdmin, TareasService } from '../../service/tareas.service';
+import { Tarea, TareaAdmin, TareasService, UserAssignable } from '../../service/tareas.service';
 
 @Component({
   selector: 'app-modal-reaperturar',
@@ -19,7 +19,26 @@ export class ModalReaperturar implements OnInit {
   motivo: string = '';
   reasignarTarea: boolean = false;
   cargoSeleccionado: string = '';
-  usuarioSeleccionado: string = '';
+  usuarioSeleccionado: string | number = '';
+
+  // Campos para reapertura según diseño
+  motivoReapertura: string = '';
+  motivosReapertura: string[] = ['Corrección de alcance', 'Falta de información', 'Revisión requerida', 'Error de ejecución'];
+  observaciones: string = '';
+  prioridadNueva: string = '';
+  prioridades: Array<{valor: string, texto: string}> = [
+    { valor: 'alta', texto: 'Alta' },
+    { valor: 'media', texto: 'Media' },
+    { valor: 'baja', texto: 'Baja' }
+  ];
+  fechaVencimientoNueva: string | null = null;
+  // Min date for vencimiento (ISO) — reiniciar desde hoy
+  minFechaVencimiento: string = new Date().toISOString();
+
+  // Datos reales cargados desde el servicio
+  usuarios: UserAssignable[] = [];
+  cargos: string[] = [];
+  usuariosFiltrados: UserAssignable[] = [];
 
   constructor(
     private modalController: ModalController,
@@ -36,11 +55,43 @@ export class ModalReaperturar implements OnInit {
     }
   }
 
+  onCargoChange(event: any) {
+    const value = event?.detail?.value ?? event;
+    if (value) {
+      this.usuariosFiltrados = this.usuarios.filter(u => u.departamento === value);
+    } else {
+      this.usuariosFiltrados = [...this.usuarios];
+    }
+  }
+
+  ngAfterViewInit() {
+    // Cargar usuarios disponibles para reasignación
+    this.tareasService.getAvailableUsers().subscribe({
+      next: (response) => {
+        if (response?.tipo === 1 && Array.isArray(response.data)) {
+          this.usuarios = response.data as UserAssignable[];
+          // Extraer cargos únicos
+          const cargosSet = new Set<string>();
+          this.usuarios.forEach(u => { if (u.departamento) cargosSet.add(u.departamento); });
+          this.cargos = Array.from(cargosSet);
+          this.usuariosFiltrados = [...this.usuarios];
+        }
+      },
+      error: (err) => {
+        console.error('Error cargando usuarios para reasignación:', err);
+      }
+    });
+  }
+
   get puedeConfirmar(): boolean {
     if (this.reasignarTarea) {
-      return this.motivo.trim().length > 0 && this.cargoSeleccionado.length > 0;
+      // Si se reasigna, debe completarse motivo y al menos un objetivo (cargo o usuario)
+      const tieneUsuario = this.usuarioSeleccionado !== null && this.usuarioSeleccionado !== '' && this.usuarioSeleccionado !== undefined;
+      const motivoVal = (this.motivoReapertura || this.motivo || '').toString();
+      return motivoVal.trim().length > 0 && (this.cargoSeleccionado.length > 0 || tieneUsuario);
     }
-    return this.motivo.trim().length > 0;
+    const motivoVal = (this.motivoReapertura || this.motivo || '').toString();
+    return motivoVal.trim().length > 0;
   }
 
   onDismiss() {
@@ -64,10 +115,13 @@ export class ModalReaperturar implements OnInit {
 
     const resultado = {
       reaperturada: true,
-      motivo: this.motivo,
+      motivo: this.motivoReapertura || this.motivo,
       reasignarTarea: this.reasignarTarea,
       cargoSeleccionado: this.cargoSeleccionado,
-      usuarioSeleccionado: this.usuarioSeleccionado
+      usuarioSeleccionado: this.usuarioSeleccionado,
+      observaciones: this.observaciones,
+      prioridadNueva: this.prioridadNueva,
+      fechaVencimientoNueva: this.fechaVencimientoNueva
     };
 
     this.modalController.dismiss(resultado, 'confirm');

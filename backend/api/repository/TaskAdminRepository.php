@@ -398,6 +398,7 @@ class TaskAdminRepository {
             'progreso' => 'progreso',
             'motivoReapertura' => 'motivo_reapertura',
             'observacionesReapertura' => 'observaciones_reapertura'
+            ,'usuarioasignado_id' => 'assigned_user_id'
         ];
         
         foreach ($fieldMap as $legacyField => $dbField) {

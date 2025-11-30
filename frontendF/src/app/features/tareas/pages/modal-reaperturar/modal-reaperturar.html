@@ -11,18 +11,40 @@
 
 <ion-content class="ion-padding">
   <div class="space-y-5 px-2">
-    <!-- Motivo -->
+    <!-- Motivo (reapertura) -->
     <div>
       <label class="block text-sm font-medium text-gray-700 mb-2">
         Motivo de reapertura <span class="text-red-500">*</span>
       </label>
+      <ion-select [(ngModel)]="motivoReapertura" placeholder="Seleccionar motivo" interface="action-sheet" mode="ios">
+        <ion-select-option *ngFor="let m of motivosReapertura" [value]="m">{{ m }}</ion-select-option>
+      </ion-select>
+    </div>
+
+    <!-- Observaciones -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-2">Observaciones</label>
       <ion-textarea
-        [(ngModel)]="motivo"
-        placeholder="Escribe el motivo por el cual deseas reaperturar esta tarea..."
-        rows="4"
+        [(ngModel)]="observaciones"
+        placeholder="Comentarios adicionales (opcional)"
+        rows="3"
         fill="outline"
         mode="md">
       </ion-textarea>
+    </div>
+
+    <!-- Prioridad nueva -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-2">Prioridad nueva</label>
+      <ion-select [(ngModel)]="prioridadNueva" placeholder="Seleccionar prioridad" interface="action-sheet" mode="ios">
+        <ion-select-option *ngFor="let p of prioridades" [value]="p.valor">{{ p.texto }}</ion-select-option>
+      </ion-select>
+    </div>
+
+    <!-- Fecha vencimiento nueva (min = hoy) -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-2">Fecha de vencimiento nueva</label>
+      <ion-datetime display-format="DD/MM/YYYY" picker-format="DD/MM/YYYY" [(ngModel)]="fechaVencimientoNueva" [min]="minFechaVencimiento"></ion-datetime>
     </div>
 
     <!-- Toggle reasignar -->
@@ -36,17 +58,15 @@
       <!-- Selección de cargo -->
       <div>
         <label class="block text-xs text-gray-500 mb-1">Cargo</label>
-        <ion-select 
-          [(ngModel)]="cargoSeleccionado" 
-          placeholder="Seleccionar cargo"
-          interface="action-sheet"
-          mode="ios"
-          class="w-full border border-gray-300 rounded-lg">
-          <ion-select-option value="mesero">Mesero</ion-select-option>
-          <ion-select-option value="supervisor">Supervisor</ion-select-option>
-          <ion-select-option value="jefe_area">Jefe de Área</ion-select-option>
-          <ion-select-option value="coordinador">Coordinador</ion-select-option>
-        </ion-select>
+          <ion-select 
+            [(ngModel)]="cargoSeleccionado" 
+            placeholder="Seleccionar cargo"
+            interface="action-sheet"
+            mode="ios"
+            class="w-full border border-gray-300 rounded-lg"
+            (ionChange)="onCargoChange($event)">
+            <ion-select-option *ngFor="let c of cargos" [value]="c">{{ c }}</ion-select-option>
+          </ion-select>
       </div>
 
       <!-- Selección de usuario -->
@@ -58,10 +78,7 @@
           interface="action-sheet"
           mode="ios"
           class="w-full border border-gray-300 rounded-lg">
-          <ion-select-option value="juan">Juan Pérez</ion-select-option>
-          <ion-select-option value="maria">María García</ion-select-option>
-          <ion-select-option value="carlos">Carlos López</ion-select-option>
-          <ion-select-option value="ana">Ana Martínez</ion-select-option>
+          <ion-select-option *ngFor="let u of usuariosFiltrados" [value]="u.id">{{ u.nombre_completo || u.username }}</ion-select-option>
         </ion-select>
       </div>
     </div>

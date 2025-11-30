@@ -25,12 +25,22 @@ class SubtareaController {
         try {
             $subtareas = $this->repository->getSubtareasByTaskId($taskId);
             $stats = $this->repository->getEstadisticasSubtareas($taskId);
-            
+
+            // Log para depuración: cuántas subtareas y muestra de contenido
+            Logger::debug('getSubtareasByTask payload', [
+                'task_id' => $taskId,
+                'count' => count($subtareas),
+                'sample' => array_slice($subtareas, 0, 5)
+            ]);
+
+            // Devolver `data` como array de subtareas (esperado por el frontend)
             $this->sendResponse([
                 'tipo' => 1,
                 'mensajes' => ['Subtareas obtenidas correctamente'],
-                'data' => [
-                    'subtareas' => $subtareas,
+                'data' => $subtareas,
+                // Compatibilidad: también exponer `subtareas` como clave directa
+                'subtareas' => $subtareas,
+                'meta' => [
                     'estadisticas' => $stats,
                     'total' => count($subtareas)
                 ]
@@ -469,12 +479,15 @@ class SubtareaController {
             
             $fecha = $this->app->request()->get('fecha');
             $subtareas = $this->repository->getSubtareasByUsuario($usuarioId, $fecha);
-            
+
+            // Devolver `data` como array para mantener consistencia con otros endpoints
             $this->sendResponse([
                 'tipo' => 1,
                 'mensajes' => ['Subtareas obtenidas correctamente'],
-                'data' => [
-                    'subtareas' => $subtareas,
+                'data' => $subtareas,
+                // Compatibilidad hacia atrás: exponer subtareas también como campo directo
+                'subtareas' => $subtareas,
+                'meta' => [
                     'total' => count($subtareas)
                 ]
             ]);

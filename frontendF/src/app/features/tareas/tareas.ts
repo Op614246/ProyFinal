@@ -300,9 +300,38 @@ export class Tareas implements OnInit, OnDestroy {
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (response) => {
+            console.log('GET /admin response', response);
             if (response.tipo === 1) {
-              this.tareasAdmin = response.data.tareas;
+              // Separar tareas que ya están asignadas de las sin asignar
+              const todas = response.data.tareas || [];
+              this.tareasAdmin = todas.filter((t: any) => t.usuarioasignado_id !== null && t.usuarioasignado_id !== undefined && t.usuarioasignado_id !== '');
               this.actualizarResumen();
+              // Forzar actualización de la vista inmediatamente
+              this.cdr.markForCheck();
+
+              // Además, cargar tareas sin asignar para mostrar en la pestaña correspondiente
+              const fecha = filtros.fecha ?? undefined;
+              this.tareasService.obtenerTareasSinAsignar(fecha)
+                .pipe(takeUntil(this.destroy$))
+                .subscribe({
+                  next: (resSin) => {
+                    console.log('GET /admin?sin_asignar response', resSin);
+                    if (resSin.tipo === 1) {
+                      this.tareasSinAsignar = resSin.data.tareas || [];
+                    } else {
+                      // Fallback: si el endpoint sin_asignar no devuelve datos, usar filtro local
+                      this.tareasSinAsignar = todas.filter((t: any) => t.usuarioasignado_id === null || t.usuarioasignado_id === undefined || t.usuarioasignado_id === '');
+                    }
+                    this.cdr.markForCheck();
+                  },
+                  error: (err) => {
+                    console.error('Error cargando tareas sin asignar (admin):', err);
+                    // Fallback local
+                    this.tareasSinAsignar = todas.filter((t: any) => t.usuarioasignado_id === null || t.usuarioasignado_id === undefined || t.usuarioasignado_id === '');
+                    this.cdr.markForCheck();
+                  }
+                });
+              console.log('tareas totals:', { todas: todas.length, tareasAdmin: this.tareasAdmin.length, tareasSinAsignar: this.tareasSinAsignar.length });
             } else {
               this.error = response.mensajes[0] || 'Error al cargar tareas';
             }
@@ -545,7 +574,11 @@ export class Tareas implements OnInit, OnDestroy {
   }
 
   // Toggle selección de tarea para auto-asignación
-  toggleSeleccionTarea(tareaId: string): void {
+  toggleSeleccionTarea(tareaId: string, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+
     if (this.tareasSeleccionadas.has(tareaId)) {
       this.tareasSeleccionadas.delete(tareaId);
     } else {
@@ -727,19 +760,75 @@ export class Tareas implements OnInit, OnDestroy {
   // Procesar reapertura de tarea
   procesarReapertura(tareaId: string, datos: any): void {
     console.log('Reaperturando tarea:', tareaId, datos);
-    // TODO: Llamar al servicio para reaperturar
-    this.tareasService.actualizarTareaAdmin(tareaId, { 
+    // Si se solicita reasignación y hay usuario seleccionado, usarlo.
+    const hoyIso = this.formatearFechaISO(new Date());
+    // Normalizar fecha de vencimiento: usar la fecha dada o reiniciar a hoy
+    let fechaVencimiento = datos?.fechaVencimientoNueva ? (String(datos.fechaVencimientoNueva).slice(0,10)) : hoyIso;
+    // Normalizar prioridad: convertir a formato capitalizado si viene en minúsculas
+    const prioridad = datos?.prioridadNueva ? (String(datos.prioridadNueva).charAt(0).toUpperCase() + String(datos.prioridadNueva).slice(1)) : undefined;
+
+    const actualizacionBase: any = {
       estado: 'Pendiente',
       motivoReapertura: datos.motivo,
-      observacionesReapertura: datos.observaciones
-    })
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: () => {
-          this.cargarTareas();
-        },
-        error: (err) => console.error('Error al reaperturar:', err)
-      });
+      observacionesReapertura: datos.observaciones,
+      fechaAsignacion: hoyIso,
+      fechaVencimiento: fechaVencimiento
+    };
+    if (prioridad) {
+      actualizacionBase.Prioridad = prioridad;
+      actualizacionBase.prioridad = prioridad;
+    }
+
+    const hacerActualizacion = (payload: any) => {
+      this.tareasService.actualizarTareaAdmin(tareaId, payload)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: () => {
+            this.toastService.success('Tarea reaperturada correctamente');
+            this.cargarTareas();
+          },
+          error: (err) => {
+            console.error('Error al reaperturar:', err);
+            this.toastService.error('Error al reaperturar tarea');
+          }
+        });
+    };
+
+    if (datos?.reasignarTarea) {
+        if (datos?.usuarioSeleccionado) {
+        // usuarioSeleccionado contiene el id del usuario (string/number)
+        const payload = { ...actualizacionBase, usuarioasignado_id: Number(datos.usuarioSeleccionado) };
+        hacerActualizacion(payload);
+        return;
+      }
+
+      if (datos?.cargoSeleccionado) {
+        // buscar un usuario disponible con ese cargo y asignar
+        this.tareasService.getAvailableUsers().pipe(takeUntil(this.destroy$)).subscribe({
+          next: (resp) => {
+            if (resp?.tipo === 1 && Array.isArray(resp.data)) {
+              const usuarios = resp.data as any[];
+              const candidato = usuarios.find(u => u.departamento === datos.cargoSeleccionado) || usuarios[0];
+              if (candidato) {
+                const payload = { ...actualizacionBase, usuarioasignado_id: candidato.id };
+                hacerActualizacion(payload);
+                return;
+              }
+            }
+            // si no hay usuarios, hacer la actualización básica sin asignación
+            hacerActualizacion(actualizacionBase);
+          },
+          error: (err) => {
+            console.error('Error obteniendo usuarios para reasignar:', err);
+            hacerActualizacion(actualizacionBase);
+          }
+        });
+        return;
+      }
+    }
+
+    // Sin reasignación: sólo reaperturar
+    hacerActualizacion(actualizacionBase);
   }
 
   // Abrir modal para completar tarea

@@ -8,9 +8,17 @@
     <ion-title class="text-center">
       <span class="font-semibold text-gray-800">Detalle de Tarea</span>
     </ion-title>
-    <ion-buttons slot="end" *ngIf="isAdmin">
-      <ion-button fill="clear" size="small" (click)="eliminarTarea()">
+    <ion-buttons slot="end">
+      <ion-button *ngIf="isAdmin" fill="clear" size="small" (click)="eliminarTarea()">
         <ion-icon name="trash-outline" class="text-xl text-red-500"></ion-icon>
+      </ion-button>
+      <ion-button *ngIf="!isAdmin && (tareaAdminSeleccionada?.usuarioasignado_id == null || tareaAdminSeleccionada?.usuarioasignado_id === 0)"
+                  fill="clear" size="small" (click)="asignarATarea($event)" [disabled]="asignando">
+        <ion-icon name="person-add-outline" class="text-xl text-green-500"></ion-icon>
+      </ion-button>
+      <!-- Botón de acción de tarea (Iniciar / Finalizar / Reaperturar para admin) -->
+      <ion-button *ngIf="textoBotonAccion()" fill="clear" size="small" (click)="ejecutarAccionPrincipal()" [color]="colorBotonAccion()">
+        {{ textoBotonAccion() }}
       </ion-button>
     </ion-buttons>
   </ion-toolbar>

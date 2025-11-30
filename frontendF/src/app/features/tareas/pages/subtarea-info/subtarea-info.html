@@ -101,25 +101,7 @@
       </div>
     </div>
 
-    <!-- Comentarios -->
-    <div class="mb-4" *ngIf="tarea?.estado !== 'Cerrada' && tarea?.estado !== 'Completada'">
-      <h3 class="text-gray-700 text-xs font-bold mb-1">Agrega un comentario <span class="text-[10px]">(Opcional)</span></h3>
-      <ion-textarea
-        [(ngModel)]="comentario"
-        placeholder="Escribe aquí..." 
-        rows="4"
-        [disabled]="tarea?.estado === 'Pendiente'"
-        class="w-full border rounded-lg text-sm"
-        fill="outline">
-      </ion-textarea>
-    </div>
-
-    <div class="mb-4" *ngIf="tarea?.estado === 'Completada'">
-      <h3 class="text-gray-700 text-xs font-bold mb-1">Comentario</h3>
-      <div class="p-2 bg-[#F2F5FB] rounded-lg flex">
-        <span class="text-[10px] font-normal text-[#878787]">{{comentario || 'Sin comentarios'}}</span>
-      </div>
-    </div>
+    <!-- Comentarios removidos: la recolección de observaciones ahora se hace en el modal de completar -->
 
     <!-- Archivos adjuntos -->
     <div class="mb-4" *ngIf="tarea?.estado !== 'Pendiente'">
@@ -151,14 +133,4 @@
   </div>
 </ion-content>
 
-<!-- Footer con botón de acción - ocultar si es tarea completada y no es admin -->
-<ion-footer *ngIf="!(tarea?.estado === 'Completada' && !isAdmin)">
-  <div class="p-4 bg-white">
-    <ion-button
-      expand="block"
-      [color]="colorBotonAccion"
-      (click)="ejecutarAccionPrincipal()">
-      {{ textoBotonAccion }}
-    </ion-button>
-  </div>
-</ion-footer>
+<!-- Modal informativo: no mostrar botones de acción aquí (solo informativo) -->
