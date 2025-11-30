@@ -186,13 +186,9 @@ class TaskAdminRepository {
             $params[] = $filtros['assigned_user_id'];
         }
         
-        // Filtro tareas sin asignar
+        // Filtro tareas sin asignar: mostrar todas las tareas sin assigned_user_id
         if (!empty($filtros['sin_asignar'])) {
             $conditions[] = "t.assigned_user_id IS NULL";
-            // Solo mostrar tareas sin asignar del día actual por defecto
-            if (empty($filtros['fecha'])) {
-                $conditions[] = "DATE(t.fecha_asignacion) = CURDATE()";
-            }
         }
         
         // Agregar WHERE si hay condiciones
