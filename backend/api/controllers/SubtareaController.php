@@ -127,6 +127,16 @@ class SubtareaController {
                 'data' => $subtarea
             ], 201);
             
+        } catch (InvalidArgumentException $e) {
+            Logger::warning('Creación de subtarea falló por datos inválidos', [
+                'task_id' => $taskId,
+                'error' => $e->getMessage()
+            ]);
+            $this->sendResponse([
+                'tipo' => 2,
+                'mensajes' => [$e->getMessage()],
+                'data' => null
+            ], 400);
         } catch (Exception $e) {
             Logger::error('Error al crear subtarea', [
                 'task_id' => $taskId,
@@ -195,6 +205,15 @@ class SubtareaController {
                 'data' => $subtarea
             ], 201);
             
+        } catch (InvalidArgumentException $e) {
+            Logger::warning('Creación de subtarea general falló por datos inválidos', [
+                'error' => $e->getMessage()
+            ]);
+            $this->sendResponse([
+                'tipo' => 2,
+                'mensajes' => [$e->getMessage()],
+                'data' => null
+            ], 400);
         } catch (Exception $e) {
             Logger::error('Error al crear subtarea general', [
                 'error' => $e->getMessage()

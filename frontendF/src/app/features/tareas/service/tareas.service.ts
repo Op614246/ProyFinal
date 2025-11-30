@@ -750,7 +750,7 @@ export class TareasService {
    * Crear nueva subtarea
    */
   crearSubtarea(taskId: string, data: any): Observable<ApiResponse<any>> {
-    return this.http.post<ApiResponse<any>>(`${environment.apiUrl}/subtareas`, {
+    return this.http.post<ApiResponse<any>>(`${environment.apiUrl}/subtareas/`, {
       ...data,
       task_id: taskId
     }).pipe(

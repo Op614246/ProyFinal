@@ -94,16 +94,16 @@ class SubtareaRepository {
     public function crearSubtarea($data) {
         $sql = "
             INSERT INTO subtareas (
-                task_id, tarea_admin_id, titulo, descripcion, estado, prioridad,
+                task_id, titulo, descripcion, estado, prioridad,
                 fechaAsignacion, fechaVencimiento, horainicio, horafin,
                 categoria_id, usuarioasignado_id, progreso, completada
             ) VALUES (
-                :task_id, :task_id, :titulo, :descripcion, :estado, :prioridad,
+                :task_id, :titulo, :descripcion, :estado, :prioridad,
                 :fechaAsignacion, :fechaVencimiento, :horainicio, :horafin,
                 :categoria_id, :usuarioasignado_id, 0, 0
             )
         ";
-        
+
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
             ':task_id' => $data['task_id'],
@@ -118,12 +118,12 @@ class SubtareaRepository {
             ':categoria_id' => $data['categoria_id'] ?? null,
             ':usuarioasignado_id' => $data['usuarioasignado_id'] ?? null
         ]);
-        
+
         $subtareaId = $this->db->lastInsertId();
-        
+
         // Actualizar progreso de la tarea padre
         $this->actualizarProgresoTarea($data['task_id']);
-        
+
         return $subtareaId;
     }
     
