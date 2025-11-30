@@ -183,10 +183,7 @@ class JwtMiddleware extends \Slim\Middleware
     {
         $response = $app->response();
         
-        // Agregar headers CORS para que el navegador pueda leer la respuesta
-        $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '*';
-        $response->header('Access-Control-Allow-Origin', $origin);
-        $response->header('Access-Control-Allow-Credentials', 'true');
+        // Headers CORS ya están establecidos en config.php
         
         $response->header('Content-Type', 'application/json');
         $response->status(401);

@@ -369,9 +369,22 @@ class TaskAdminController {
      */
     private function sendResponse($data, $statusCode = 200) {
         $response = $this->app->response();
-        $response->header('Content-Type', 'application/json');
+        $response->header('Content-Type', 'application/json; charset=utf-8');
         $response->status($statusCode);
-        $response->body(json_encode($data, JSON_UNESCAPED_UNICODE));
+        
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        
+        // Si hay error de JSON, loguear y devolver error genérico
+        if ($json === false) {
+            Logger::error('Error al codificar JSON', ['error' => json_last_error_msg()]);
+            $json = json_encode([
+                'tipo' => 3,
+                'mensajes' => ['Error interno al procesar respuesta'],
+                'data' => null
+            ]);
+        }
+        
+        $response->body($json);
     }
 }
 ?>

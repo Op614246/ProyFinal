@@ -122,17 +122,22 @@ export interface Tarea {
 export interface TareaAdmin {
   id: string;
   titulo: string;
-  estado: 'Pendiente' | 'En progreso' | 'Completada';
+  descripcion?: string;
+  estado: 'Pendiente' | 'En progreso' | 'Completada' | 'Incompleta' | 'Inactiva';
   fechaAsignacion: string;
   horaprogramada: string;
   horainicio: string;
   horafin: string;
   sucursal: string;
   Categoria: string;
+  prioridad?: string;
+  Prioridad?: string;
   totalSubtareas: number;
   subtareasCompletadas: number;
   created_by_nombre: string;
   created_by_apellido: string;
+  usuarioasignado?: string;
+  usuarioasignado_id?: number;
   Tarea: Tarea[];
   motivoReapertura?: string;
   observacionesReapertura?: string;

@@ -30,8 +30,15 @@ export class AuthInterceptor implements HttpInterceptor {
   intercept(request: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
     // Clonar la petición y añadir headers
     let headers = request.headers
-      .set('Content-Type', 'application/json')
       .set('X-API-Key', environment.apiKey);
+
+    // Solo agregar Content-Type para peticiones con body (POST, PUT, PATCH)
+    if (request.method !== 'GET' && request.method !== 'DELETE') {
+      // No agregar Content-Type si es FormData (para subir archivos)
+      if (!(request.body instanceof FormData)) {
+        headers = headers.set('Content-Type', 'application/json');
+      }
+    }
 
     // Añadir token JWT si existe
     const token = this.tokenService.getToken();

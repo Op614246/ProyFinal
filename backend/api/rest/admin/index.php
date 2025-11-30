@@ -9,12 +9,10 @@
  * - JwtMiddleware (JWT Token) → Autorización del usuario
  */
 
-// Error reporting
+// Error reporting - solo loguear, no mostrar en output
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
-// Debug: Verificar que el archivo se está ejecutando
-error_log('DEBUG: admin/index.php ejecutándose', 3, __DIR__ . '/debug.log');
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 
 // Cargar configuración base (incluye autoload con PSR-4, dotenv y crea $app)
 require_once __DIR__ . '/../../config.php';

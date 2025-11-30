@@ -29,7 +29,18 @@ class DB
 
         } catch (Exception $er) {
             // En producción nunca mostramos el error real de la BD
-            exit("Error de conexión a la base de datos."); 
+            // Registrar error para debugging
+            error_log("DB Connection Error: " . $er->getMessage());
+            
+            // Devolver respuesta JSON válida
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(500);
+            echo json_encode([
+                "tipo" => 3,
+                "mensajes" => ["Error de conexión a la base de datos."],
+                "data" => null
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
         }
     }
 

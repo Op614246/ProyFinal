@@ -39,6 +39,12 @@ export class Creartarea implements OnInit {
   prioridad: string = 'medium';
   estadoActivo: boolean = true;
   
+  // Fechas
+  fechaAsignacion: string = new Date().toISOString().split('T')[0];
+  fechaLimite: string = '';
+  horaInicio: string = '';
+  horaFin: string = '';
+  
   // Modo edición
   modoEdicion: boolean = false;
   tareaId?: string;
@@ -314,6 +320,10 @@ export class Creartarea implements OnInit {
       categoria_id: this.categoriaSeleccionadaId,
       sucursal_id: this.sucursalSeleccionadaId,
       orden: parseInt(this.orden),
+      fecha_asignacion: this.fechaAsignacion,
+      deadline: this.fechaLimite || null,
+      horainicio: this.horaInicio || null,
+      horafin: this.horaFin || null,
     };
     
     // Si se asigna a usuario, agregar el ID
@@ -355,8 +365,12 @@ export class Creartarea implements OnInit {
     this.sucursalSeleccionada = '';
     this.sucursalSeleccionadaId = null;
     this.orden = '1';
-    this.prioridad = 'media';
+    this.prioridad = 'medium';
     this.estadoActivo = true;
+    this.fechaAsignacion = new Date().toISOString().split('T')[0];
+    this.fechaLimite = '';
+    this.horaInicio = '';
+    this.horaFin = '';
     this.modoEdicion = false;
     this.tareaId = undefined;
   }

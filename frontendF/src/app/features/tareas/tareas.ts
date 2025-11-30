@@ -32,6 +32,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ModalReaperturar } from './pages/modal-reaperturar/modal-reaperturar';
 import { ModalCompletar } from './pages/modal-completar/modal-completar';
+import { SubtareaInfo } from './pages/subtarea-info/subtarea-info';
 
 @Component({
   selector: 'app-tareas',
@@ -309,8 +310,23 @@ export class Tareas implements OnInit, OnDestroy {
             this.cdr.markForCheck();
           },
           error: (err) => {
-            console.error('Error:', err);
-            this.error = 'Error al conectar con el servidor';
+            console.error('Error completo:', err);
+            console.error('Status:', err.status);
+            console.error('Message:', err.message);
+            console.error('Error body:', err.error);
+            
+            // Mostrar más información del error
+            if (err.status === 0) {
+              this.error = 'Error de red: No se pudo conectar con el servidor (CORS o servidor no disponible)';
+            } else if (err.status === 401) {
+              this.error = 'No autorizado: La sesión ha expirado';
+            } else if (err.status === 403) {
+              this.error = 'Acceso denegado';
+            } else if (err.status === 500) {
+              this.error = 'Error interno del servidor';
+            } else {
+              this.error = `Error al conectar con el servidor (${err.status || 'desconocido'})`;
+            }
             this.cargando = false;
             this.cdr.markForCheck();
           }
@@ -615,16 +631,47 @@ export class Tareas implements OnInit, OnDestroy {
     }
   }
 
-  verDetallesTarea(tarea: TareaAdmin): void {
-    // Si la tarea está completada, mostrar opción de reapertura
-    if (tarea.estado === 'Completada') {
-      this.mostrarOpcionesTareaCompletada(tarea);
-    } else {
-      // Si está pendiente o en progreso, ir a detalles
-      this.router.navigate(['/features/tareas/info'], { 
-        queryParams: { tareaId: tarea.id }
-      });
-    }
+  // Abrir modal de información de tarea usando SubtareaInfo
+  async verDetallesTarea(tarea: TareaAdmin): Promise<void> {
+    // Convertir TareaAdmin a Tarea para compatibilidad con SubtareaInfo
+    const tareaInfo: Tarea = {
+      id: tarea.id,
+      titulo: tarea.titulo,
+      descripcion: tarea.descripcion || '',
+      estado: tarea.estado as any,
+      estadodetarea: 'Activo',
+      prioridad: (tarea.Prioridad || tarea.prioridad || 'Media') as any,
+      Prioridad: (tarea.Prioridad || tarea.prioridad || 'Media') as any,
+      completada: tarea.estado === 'Completada',
+      progreso: 0,
+      fechaAsignacion: tarea.fechaAsignacion,
+      Categoria: tarea.Categoria,
+      horaprogramada: tarea.horaprogramada,
+      horainicio: tarea.horainicio,
+      horafin: tarea.horafin,
+      usuarioasignado: tarea.usuarioasignado || '',
+      usuarioasignado_id: tarea.usuarioasignado_id || 0,
+      totalSubtareas: tarea.totalSubtareas,
+      subtareasCompletadas: tarea.subtareasCompletadas
+    };
+
+    const modal = await this.modalController.create({
+      component: SubtareaInfo,
+      componentProps: {
+        tarea: tareaInfo,
+        tareaadmin: tarea
+      },
+      breakpoints: [0, 0.75, 1],
+      initialBreakpoint: 0.75
+    });
+
+    modal.onDidDismiss().then((result) => {
+      if (result.role === 'confirm' || result.data?.actualizada) {
+        this.cargarTareas();
+      }
+    });
+
+    await modal.present();
   }
 
   // Mostrar opciones para tarea completada

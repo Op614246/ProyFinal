@@ -30,10 +30,7 @@ class SecurityMiddleware extends \Slim\Middleware
 
         // Validamos
         if ($reqKey !== $this->validKey) {
-            // Agregar headers CORS para que el navegador pueda leer la respuesta
-            $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '*';
-            $response->header('Access-Control-Allow-Origin', $origin);
-            $response->header('Access-Control-Allow-Credentials', 'true');
+            // Headers CORS ya están establecidos en config.php
             
             // Rechazo inmediato
             $response->header('Content-Type', 'application/json');

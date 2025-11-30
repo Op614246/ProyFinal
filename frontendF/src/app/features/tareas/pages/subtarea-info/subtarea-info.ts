@@ -2,7 +2,7 @@ import { Location } from '@angular/common';
 import { Component, Input, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { faFlag, faXmark } from '@fortawesome/pro-regular-svg-icons';
-import { ActionSheetController, AlertController, ModalController, ToastController } from '@ionic/angular';
+import { ActionSheetController, AlertController, ModalController, ToastController, NavParams } from '@ionic/angular';
 import { ModalForm } from '../../modal-form/modal-form';
 import { Tarea, TareaAdmin, TareasService } from '../../service/tareas.service';
 
@@ -20,6 +20,9 @@ export class SubtareaInfo implements OnInit {
   fromTab: string = '';
   comentario: string = '';
   archivosSubidos: any[] = [];
+  
+  // Flag para detectar si está en modo modal
+  esModal: boolean = false;
   
   public faFlag = faFlag;
   public faXmark = faXmark;
@@ -40,6 +43,13 @@ export class SubtareaInfo implements OnInit {
   ) { }
 
   ngOnInit() {
+    // Detectar si está en modo modal (si recibió tarea directamente como Input)
+    if (this.tarea) {
+      this.esModal = true;
+      this.tareaId = this.tarea.id;
+      return;
+    }
+    
     this.route.queryParams.subscribe(params => {
       this.tareaId = params['tareaId'] || '';
       this.fromTab = params['fromTab'] || '';
@@ -86,7 +96,19 @@ export class SubtareaInfo implements OnInit {
   }
 
   goBack() {
-    this.location.back();
+    if (this.esModal) {
+      this.modalController.dismiss(null, 'cancel');
+    } else {
+      this.location.back();
+    }
+  }
+  
+  cerrarModal(data?: any, role: string = 'confirm') {
+    if (this.esModal) {
+      this.modalController.dismiss(data, role);
+    } else {
+      this.location.back();
+    }
   }
 
   async subirArchivo() {
@@ -159,8 +181,21 @@ export class SubtareaInfo implements OnInit {
 
   async iniciarTarea() {
     if (this.tarea) {
-      this.tarea.estado = 'En progreso';
-      this.mostrarToast('Tarea iniciada', 'success');
+      // Llamar al servicio para iniciar la tarea
+      this.tareasService.iniciarTarea(this.tarea.id).subscribe({
+        next: (response) => {
+          if (response.tipo === 1) {
+            this.tarea!.estado = 'En progreso';
+            this.mostrarToast('Tarea iniciada', 'success');
+          } else {
+            this.mostrarToast(response.mensajes[0] || 'Error al iniciar', 'danger');
+          }
+        },
+        error: (err) => {
+          console.error('Error al iniciar tarea:', err);
+          this.mostrarToast('Error al iniciar la tarea', 'danger');
+        }
+      });
     }
   }
 
@@ -177,10 +212,23 @@ export class SubtareaInfo implements OnInit {
           text: 'Finalizar',
           handler: () => {
             if (this.tarea) {
-              this.tarea.estado = 'Completada';
-              this.tarea.completada = true;
-              this.mostrarToast('Tarea finalizada exitosamente', 'success');
-              this.goBack();
+              // Llamar al servicio para completar la tarea
+              this.tareasService.finalizarTarea(this.tarea.id, this.comentario).subscribe({
+                next: (response) => {
+                  if (response.tipo === 1) {
+                    this.tarea!.estado = 'Completada';
+                    this.tarea!.completada = true;
+                    this.mostrarToast('Tarea finalizada exitosamente', 'success');
+                    this.cerrarModal({ actualizada: true }, 'confirm');
+                  } else {
+                    this.mostrarToast(response.mensajes[0] || 'Error al finalizar', 'danger');
+                  }
+                },
+                error: (err) => {
+                  console.error('Error al finalizar tarea:', err);
+                  this.mostrarToast('Error al finalizar la tarea', 'danger');
+                }
+              });
             }
           }
         }

@@ -131,6 +131,58 @@
       </ion-select>
     </div>
 
+    <!-- Fechas -->
+    <div class="grid grid-cols-2 gap-4">
+      <!-- Fecha de Asignación -->
+      <div class="space-y-1">
+        <label class="block text-xs text-gray-600 font-normal">Fecha Asignación</label>
+        <ion-input
+          type="date"
+          [(ngModel)]="fechaAsignacion"
+          fill="outline"
+          class="text-xs">
+        </ion-input>
+      </div>
+
+      <!-- Fecha Límite -->
+      <div class="space-y-1">
+        <label class="block text-xs text-gray-600 font-normal">Fecha Límite</label>
+        <ion-input
+          type="date"
+          [(ngModel)]="fechaLimite"
+          fill="outline"
+          class="text-xs"
+          [min]="fechaAsignacion">
+        </ion-input>
+      </div>
+    </div>
+
+    <!-- Horarios -->
+    <div class="grid grid-cols-2 gap-4">
+      <!-- Hora Inicio -->
+      <div class="space-y-1">
+        <label class="block text-xs text-gray-600 font-normal">Hora Inicio</label>
+        <ion-input
+          type="time"
+          [(ngModel)]="horaInicio"
+          fill="outline"
+          class="text-xs">
+        </ion-input>
+      </div>
+
+      <!-- Hora Fin -->
+      <div class="space-y-1">
+        <label class="block text-xs text-gray-600 font-normal">Hora Fin</label>
+        <ion-input
+          type="time"
+          [(ngModel)]="horaFin"
+          fill="outline"
+          class="text-xs"
+          [min]="horaInicio">
+        </ion-input>
+      </div>
+    </div>
+
     <!-- Fila de Orden y Prioridad -->
     <div class="grid grid-cols-2 gap-4">
       <!-- Orden -->
