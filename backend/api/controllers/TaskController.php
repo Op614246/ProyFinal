@@ -2,14 +2,14 @@
 /**
  * TaskController.php
  * 
- * Controlador de tareas con:
- * - Encriptación AES-256 de datos en tránsito
- * - Validación de archivos para completar tareas
- * - Ordenamiento inteligente para usuarios
- * - Logging con Monolog
+ * Controlador unificado de tareas con RBAC.
+ * - Usa TaskConfig para constantes
+ * - Admin: crear, asignar, reasignar, reabrir, eliminar
+ * - User: listar propias, auto-asignar, completar
  */
 
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/../core/TaskConfig.php';
 require_once __DIR__ . '/../../smart/validators/TaskValidator.php';
 
 class TaskController
@@ -18,11 +18,6 @@ class TaskController
     private $repository;
     private $validator;
     private $encryptionKey;
-
-    // Constantes
-    const DEFAULT_STATUS = 'pending';
-    const DEFAULT_DEADLINE_DAYS = 2;
-    const UPLOAD_DIR = '/uploads/tasks/';
 
     public function __construct($app)
     {
@@ -51,7 +46,7 @@ class TaskController
                 return $this->sendResponse($this->validator->invalidSession());
             }
 
-            $isAdmin = $userData['role'] === 'admin';
+            $isAdmin = TaskConfig::isAdmin($userData['role']);
 
             if ($isAdmin) {
                 // Admin: obtener filtros de query params
@@ -128,7 +123,7 @@ class TaskController
             }
 
             // Solo admin puede crear tareas
-            if ($userData['role'] !== 'admin') {
+            if (!TaskConfig::isAdmin($userData['role'])) {
                 Logger::warning('Intento de crear tarea sin permisos', [
                     'user_id' => $userData['id'],
                     'role' => $userData['role'],
@@ -146,7 +141,7 @@ class TaskController
 
             // Calcular deadline si viene vacío (+2 días) ANTES de validar
             if (empty($data['deadline'])) {
-                $data['deadline'] = date('Y-m-d', strtotime('+' . self::DEFAULT_DEADLINE_DAYS . ' days'));
+                $data['deadline'] = TaskConfig::getDefaultDeadline();
             }
 
             // Validar datos
@@ -154,8 +149,8 @@ class TaskController
                 return $this->sendResponse($this->validator->createValidationError());
             }
 
-            // Establecer status por defecto (importante: no tiene default en BD)
-            $data['status'] = self::DEFAULT_STATUS;
+            // Establecer status por defecto
+            $data['status'] = TaskConfig::STATUS_PENDING;
 
             // Sanitizar datos
             $data['title'] = trim($data['title']);
@@ -225,7 +220,7 @@ class TaskController
                 return $this->sendResponse($this->validator->taskNotFound());
             }
 
-            $isAdmin = $userData['role'] === 'admin';
+            $isAdmin = TaskConfig::isAdmin($userData['role']);
 
             if ($isAdmin) {
                 // Admin: puede reasignar a cualquier usuario
@@ -327,13 +322,12 @@ class TaskController
             }
 
             // Verificar que la tarea no está ya completada
-            if ($task['status'] === 'completed') {
+            if ($task['status'] === TaskConfig::STATUS_COMPLETED) {
                 return $this->sendResponse($this->validator->alreadyCompleted());
             }
 
             // Verificar que el estado permite completar
-            $allowedStatuses = ['pending', 'in_process'];
-            if (!in_array($task['status'], $allowedStatuses)) {
+            if (!TaskConfig::canComplete($task['status'])) {
                 return $this->sendResponse($this->validator->cannotComplete());
             }
 
@@ -355,14 +349,13 @@ class TaskController
             if ($hasImage) {
                 $file = $_FILES['evidence'];
 
-                // Validar tamaño máximo 1.5 MB
-                $maxSizeKb = 1536; // 1.5 MB en KB
+                // Validar tamaño máximo
                 $fileSizeKb = $file['size'] / 1024;
 
-                if ($fileSizeKb > $maxSizeKb) {
+                if ($fileSizeKb > TaskConfig::MAX_FILE_SIZE_KB) {
                     return $this->sendResponse([
                         'tipo' => 0,
-                        'mensajes' => ['La imagen no puede exceder 1.5 MB.'],
+                        'mensajes' => ['La imagen no puede exceder ' . (TaskConfig::MAX_FILE_SIZE_KB / 1024) . ' MB.'],
                         'data' => null
                     ]);
                 }
@@ -445,7 +438,7 @@ class TaskController
             }
 
             // Usuario solo puede ver sus propias tareas o tareas disponibles
-            if ($userData['role'] !== 'admin') {
+            if (!TaskConfig::isAdmin($userData['role'])) {
                 $isOwner = (int)$task['assigned_user_id'] === $userData['id'];
                 $isAvailable = $task['assigned_user_id'] === null;
 
@@ -486,7 +479,7 @@ class TaskController
             }
 
             // Solo admin puede cambiar estado manualmente
-            if ($userData['role'] !== 'admin') {
+            if (!TaskConfig::isAdmin($userData['role'])) {
                 Logger::warning('Intento de cambiar estado sin permisos', [
                     'user_id' => $userData['id'],
                     'task_id' => $taskId,
@@ -562,7 +555,7 @@ class TaskController
             }
 
             // Solo admin puede eliminar tareas
-            if ($userData['role'] !== 'admin') {
+            if (!TaskConfig::isAdmin($userData['role'])) {
                 Logger::warning('Intento de eliminar tarea sin permisos', [
                     'user_id' => $userData['id'],
                     'task_id' => $taskId,
@@ -581,8 +574,8 @@ class TaskController
                 return $this->sendResponse($this->validator->taskNotFound());
             }
 
-            // No permitir eliminar tareas completadas (opcional)
-            if ($task['status'] === 'completed') {
+            // No permitir eliminar tareas completadas
+            if ($task['status'] === TaskConfig::STATUS_COMPLETED) {
                 return $this->sendResponse($this->validator->cannotDeleteCompleted());
             }
 
@@ -628,7 +621,7 @@ class TaskController
             }
 
             // Solo admin puede reabrir tareas
-            if ($userData['role'] !== 'admin') {
+            if (!TaskConfig::isAdmin($userData['role'])) {
                 Logger::warning('Intento de reabrir tarea sin permisos', [
                     'user_id' => $userData['id'],
                     'task_id' => $taskId,
@@ -648,8 +641,7 @@ class TaskController
             }
 
             // Solo se pueden reabrir tareas completadas o incompletas
-            $allowedStatuses = ['completed', 'incomplete'];
-            if (!in_array($task['status'], $allowedStatuses)) {
+            if (!TaskConfig::canReopen($task['status'])) {
                 return $this->sendResponse([
                     'tipo' => 0,
                     'mensajes' => ['Solo se pueden reabrir tareas completadas o incompletas.'],
@@ -671,8 +663,15 @@ class TaskController
             $motivo = trim($data['motivo']);
             $observaciones = isset($data['observaciones']) ? trim($data['observaciones']) : null;
 
+            // Datos adicionales para reapertura
+            $newData = [
+                'assigned_user_id' => $data['assigned_user_id'] ?? null,
+                'deadline' => $data['deadline'] ?? null,
+                'priority' => $data['priority'] ?? null
+            ];
+
             // Reabrir tarea
-            $result = $this->repository->reopen($taskId, $userData['id'], $motivo, $observaciones);
+            $result = $this->repository->reopen($taskId, $userData['id'], $motivo, $observaciones, $newData);
 
             if ($result) {
                 Logger::info('Tarea reabierta', [
@@ -688,7 +687,7 @@ class TaskController
                     'mensajes' => ['Tarea reabierta exitosamente.'],
                     'data' => [
                         'task_id' => $taskId,
-                        'new_status' => 'pending',
+                        'new_status' => TaskConfig::STATUS_PENDING,
                         'reopened_at' => date('Y-m-d H:i:s')
                     ]
                 ]);
@@ -725,7 +724,7 @@ class TaskController
                 return $this->sendResponse($this->validator->invalidSession());
             }
 
-            $isAdmin = $userData['role'] === 'admin';
+            $isAdmin = TaskConfig::isAdmin($userData['role']);
             
             // Admin ve todas las estadísticas, usuario solo las suyas
             $userId = $isAdmin ? null : $userData['id'];
@@ -789,7 +788,7 @@ class TaskController
                 return $this->sendResponse($this->validator->invalidSession());
             }
 
-            if ($userData['role'] !== 'admin') {
+            if (!TaskConfig::isAdmin($userData['role'])) {
                 return $this->sendResponse($this->validator->adminRequired());
             }
 
@@ -811,7 +810,7 @@ class TaskController
     }
 
     // ============================================================
-    // SECCIÓN: MÉTODOS PRIVADOS DE APOYO
+    // MÉTODOS PRIVADOS
     // ============================================================
 
     /**
@@ -878,33 +877,22 @@ class TaskController
     }
 
     /**
-     * Guarda la imagen de evidencia
+     * Guarda la imagen de evidencia.
      */
     private function saveEvidenceImage(array $file, int $taskId, int $userId): ?string
     {
         try {
-            // Crear directorio si no existe
-            $uploadDir = __DIR__ . '/..' . self::UPLOAD_DIR;
+            $uploadDir = __DIR__ . '/../' . TaskConfig::UPLOAD_DIR;
 
             if (!is_dir($uploadDir)) {
                 mkdir($uploadDir, 0755, true);
             }
 
-            // Generar nombre único
-            $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-            $filename = sprintf(
-                'task_%d_user_%d_%s.%s',
-                $taskId,
-                $userId,
-                date('YmdHis'),
-                strtolower($extension)
-            );
-
+            $filename = TaskConfig::generateEvidenceFileName($taskId, $userId, $file['name']);
             $destination = $uploadDir . $filename;
 
-            // Mover archivo
             if (move_uploaded_file($file['tmp_name'], $destination)) {
-                return self::UPLOAD_DIR . $filename;
+                return TaskConfig::UPLOAD_DIR . $filename;
             }
 
             return null;
@@ -918,10 +906,7 @@ class TaskController
             return null;
         }
     }
-
-    /**
-     * Envía la respuesta JSON
-     */
+    
     private function sendResponse(array $responseData): void
     {
         $this->app->contentType('application/json; charset=utf-8');

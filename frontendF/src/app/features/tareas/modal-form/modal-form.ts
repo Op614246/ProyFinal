@@ -83,13 +83,9 @@ export class ModalForm implements OnInit {
 
   // Modal selección de cargo
   async abrirModalCargo() {
-    // Implementar o usar picker
-    console.log('Abrir modal cargo');
   }
 
   // Modal selección de usuario
   async abrirModalUsuario() {
-    // Implementar o usar picker
-    console.log('Abrir modal usuario');
   }
 }

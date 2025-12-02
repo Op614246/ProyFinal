@@ -4,141 +4,126 @@
  * 
  * Endpoint: /api/rest/admin/
  * 
- * Seguridad:
- * - SecurityMiddleware (API Key) → Autenticación de la app cliente
- * - JwtMiddleware (JWT Token) → Autorización del usuario
+ * NOTA: Este endpoint se mantiene por compatibilidad con el frontend.
+ * Las rutas redirigen al TaskController unificado.
+ * 
+ * Considerar migrar el frontend a usar /api/rest/tasks/ directamente.
  */
 
-// Error reporting - solo loguear, no mostrar en output
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
-// Cargar configuración base (incluye autoload con PSR-4, dotenv y crea $app)
 require_once __DIR__ . '/../../config.php';
-require_once __DIR__ . '/../../controllers/TaskAdminController.php';
+require_once __DIR__ . '/../../controllers/TaskController.php';
 require_once __DIR__ . '/../../controllers/SubtareaController.php';
 require_once __DIR__ . '/../../repository/SubtareaRepository.php';
 
-// ============================================
 // CORS
-// ============================================
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-// ============================================
-// MIDDLEWARES (se ejecutan en orden inverso)
-// ============================================
-
-// 1. JWT Middleware - Autorización de usuario
+// Middlewares
 $app->add(new JwtMiddleware());
-
-// 2. API Key Middleware - Autenticación de la aplicación
 $app->add(new SecurityMiddleware(getenv('API_KEY')));
 
 // ============================================
-// RUTAS - TAREAS ADMIN
+// RUTAS - TAREAS (redirigen a TaskController)
 // ============================================
 
 /**
  * GET /
- * Obtener todas las tareas admin
+ * Obtener todas las tareas
  */
 $app->get('/', function () use ($app) {
-    $controller = new TaskAdminController($app);
-    $controller->getAllTareasAdmin();
+    $controller = new TaskController($app);
+    $controller->getAll();
 });
 
 /**
  * GET /fecha/:fecha
- * Obtener tareas admin por fecha (YYYY-MM-DD)
+ * Obtener tareas por fecha - Ahora usa filtro en getAll
  */
 $app->get('/fecha/:fecha', function ($fecha) use ($app) {
-    $controller = new TaskAdminController($app);
-    $controller->getTareasAdminPorFecha($fecha);
+    // Inyectar el parámetro como query param para que getAll() lo use
+    $_GET['fecha'] = $fecha;
+    $controller = new TaskController($app);
+    $controller->getAll();
 });
 
 /**
  * POST /
- * Crear nueva tarea admin
+ * Crear nueva tarea
  */
 $app->post('/', function () use ($app) {
-    $controller = new TaskAdminController($app);
-    $controller->createTareaAdmin();
+    $controller = new TaskController($app);
+    $controller->create();
 });
 
 /**
  * POST /:id/asignar
- * Auto-asignar tarea al usuario autenticado
+ * Asignar tarea
  */
 $app->post('/:id/asignar', function ($tareaId) use ($app) {
-    $controller = new TaskAdminController($app);
-    $controller->asignarTarea($tareaId);
+    $controller = new TaskController($app);
+    $controller->assign($tareaId);
 });
 
 /**
  * POST /:id/completar
- * Completar tarea con observaciones y evidencia
+ * Completar tarea
  */
 $app->post('/:id/completar', function ($tareaId) use ($app) {
-    $controller = new TaskAdminController($app);
-    $controller->completarTarea($tareaId);
-});
-
-/**
- * PUT /:id/iniciar
- * Iniciar tarea (cambiar a 'En progreso')
- */
-$app->put('/:id/iniciar', function ($tareaId) use ($app) {
-    $controller = new TaskAdminController($app);
-    $controller->iniciarTarea($tareaId);
+    $controller = new TaskController($app);
+    $controller->complete($tareaId);
 });
 
 /**
  * PUT /:id/reabrir
- * Reabrir tarea completada
+ * Reabrir tarea
  */
 $app->put('/:id/reabrir', function ($tareaId) use ($app) {
-    $controller = new TaskAdminController($app);
-    $controller->reabrirTarea($tareaId);
+    $controller = new TaskController($app);
+    $controller->reopen($tareaId);
 });
 
 /**
  * PUT /:id
- * Actualizar tarea admin
+ * Actualizar tarea - usa update en TaskController (pendiente implementar)
  */
 $app->put('/:id', function ($tareaId) use ($app) {
-    $controller = new TaskAdminController($app);
-    $controller->updateTareaAdmin($tareaId);
+    // TODO: Agregar método update() a TaskController si es necesario
+    $controller = new TaskController($app);
+    // Por ahora, updateStatus maneja cambios de estado
+    $controller->updateStatus($tareaId);
 });
 
 /**
  * DELETE /:id
- * Eliminar tarea admin
+ * Eliminar tarea
  */
 $app->delete('/:id', function ($tareaId) use ($app) {
-    $controller = new TaskAdminController($app);
-    $controller->deleteTareaAdmin($tareaId);
+    $controller = new TaskController($app);
+    $controller->delete($tareaId);
 });
 
 /**
  * GET /:id
- * Obtener tarea admin específica (AL FINAL para que no capture otras rutas)
+ * Obtener tarea específica
  */
 $app->get('/:id', function ($tareaId) use ($app) {
-    $controller = new TaskAdminController($app);
-    $controller->getTareaAdminById($tareaId);
+    $controller = new TaskController($app);
+    $controller->getById($tareaId);
 });
 
 // ============================================
-// RUTAS - SUBTAREAS DE UNA TAREA
+// RUTAS - SUBTAREAS
 // ============================================
 
 /**
  * GET /:taskId/subtareas
- * Obtener subtareas de una tarea
  */
 $app->get('/:taskId/subtareas', function ($taskId) use ($app) {
     $controller = new SubtareaController($app);
@@ -147,15 +132,11 @@ $app->get('/:taskId/subtareas', function ($taskId) use ($app) {
 
 /**
  * POST /:taskId/subtareas
- * Crear nueva subtarea en una tarea
  */
 $app->post('/:taskId/subtareas', function ($taskId) use ($app) {
     $controller = new SubtareaController($app);
     $controller->crearSubtarea($taskId);
 });
 
-// ============================================
-// RUN
-// ============================================
 $app->run();
 ?>

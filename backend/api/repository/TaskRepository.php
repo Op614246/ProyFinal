@@ -2,12 +2,13 @@
 /**
  * TaskRepository.php
  * 
- * Repositorio para operaciones de tareas (Schema Imagen 2)
- * Soporta funcionalidades de Admin y User con roles diferenciados
- * 
- * Estados: pending, in_process, completed, incomplete, inactive
- * Prioridades: high, medium, low
+ * Repositorio único para operaciones de tareas.
+ * - Usa TaskConfig para constantes (sin hardcoding)
+ * - Métodos unificados para Admin y User
+ * - Clean Code: métodos pequeños y reutilizables
  */
+
+require_once __DIR__ . '/../core/TaskConfig.php';
 
 class TaskRepository
 {
@@ -19,18 +20,15 @@ class TaskRepository
     }
 
     // ============================================================
-    // SECCIÓN: CONSULTAS DE LECTURA
+    // CONSULTAS DE LECTURA
     // ============================================================
 
     /**
-     * Obtiene todas las tareas con filtros para Admin
-     * 
-     * @param array $filters Filtros: fecha, fecha_inicio, fecha_fin, status, priority, assigned_user_id, sucursal
-     * @return array Lista de tareas
+     * Base SQL para consultas de tareas (evita duplicación)
      */
-    public function getAllForAdmin(array $filters = []): array
+    private function getBaseTaskQuery(): string
     {
-        $sql = "SELECT 
+        return "SELECT 
                     t.id,
                     t.title,
                     t.description,
@@ -44,193 +42,164 @@ class TaskRepository
                     t.horainicio,
                     t.horafin,
                     t.assigned_user_id,
-                    CONCAT(ua.nombre, ' ', ua.apellido) AS assigned_username,
+                    CONCAT(ua.nombre, ' ', ua.apellido) AS assigned_user_name,
                     t.created_by_user_id,
                     CONCAT(uc.nombre, ' ', uc.apellido) AS created_by_name,
                     t.sucursal_id,
                     s.nombre AS sucursal_nombre,
                     t.progreso,
                     t.completed_at,
-                    t.evidence_image,
                     t.completion_notes,
-                    t.motivo_reapertura,
-                    t.observaciones_reapertura,
+                    t.reopened_at,
                     t.created_at,
                     t.updated_at,
-                    (SELECT COUNT(*) FROM task_evidence te WHERE te.task_id = t.id) AS evidencia_count
+                    (SELECT COUNT(*) FROM task_evidencias te WHERE te.task_id = t.id) AS evidencia_count,
+                    (SELECT COUNT(*) FROM subtareas st WHERE st.task_id = t.id) AS subtareas_total,
+                    (SELECT COUNT(*) FROM subtareas st WHERE st.task_id = t.id AND (st.completada = 1 OR st.estado = 'Completada')) AS subtareas_completadas
                 FROM tasks t
                 LEFT JOIN users ua ON t.assigned_user_id = ua.id
                 LEFT JOIN users uc ON t.created_by_user_id = uc.id
                 LEFT JOIN categorias c ON t.categoria_id = c.id
-                LEFT JOIN sucursales s ON t.sucursal_id = s.id
-                WHERE 1=1";
+                LEFT JOIN sucursales s ON t.sucursal_id = s.id";
+    }
 
+    /**
+     * Obtiene tareas con filtros dinámicos.
+     * Método unificado para Admin y User.
+     * 
+     * @param array $filters Filtros opcionales
+     * @return array Lista de tareas
+     */
+    public function getAll(array $filters = []): array
+    {
+        $sql = $this->getBaseTaskQuery() . " WHERE 1=1";
         $params = [];
 
-        // Filtro por fecha específica
+        // Aplicar filtros dinámicamente
+        $sql = $this->applyFilters($sql, $params, $filters);
+
+        // Ordenamiento inteligente
+        $sql .= " ORDER BY 
+                    FIELD(t.status, '" . TaskConfig::STATUS_IN_PROCESS . "', '" . TaskConfig::STATUS_PENDING . "', '" . TaskConfig::STATUS_INCOMPLETE . "', '" . TaskConfig::STATUS_INACTIVE . "', '" . TaskConfig::STATUS_COMPLETED . "'),
+                    FIELD(t.priority, '" . TaskConfig::PRIORITY_HIGH . "', '" . TaskConfig::PRIORITY_MEDIUM . "', '" . TaskConfig::PRIORITY_LOW . "'),
+                    t.fecha_asignacion DESC,
+                    t.horainicio ASC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Aplica filtros dinámicos a una consulta SQL.
+     */
+    private function applyFilters(string $sql, array &$params, array $filters): string
+    {
+        // Fecha específica
         if (!empty($filters['fecha'])) {
             $sql .= " AND DATE(t.fecha_asignacion) = :fecha";
             $params[':fecha'] = $filters['fecha'];
         }
 
-        // Filtro por rango de fechas
+        // Rango de fechas
         if (!empty($filters['fecha_inicio'])) {
             $sql .= " AND DATE(t.fecha_asignacion) >= :fecha_inicio";
             $params[':fecha_inicio'] = $filters['fecha_inicio'];
         }
-
         if (!empty($filters['fecha_fin'])) {
             $sql .= " AND DATE(t.fecha_asignacion) <= :fecha_fin";
             $params[':fecha_fin'] = $filters['fecha_fin'];
         }
 
-        // Filtro por estado
+        // Estado
         if (!empty($filters['status'])) {
             $sql .= " AND t.status = :status";
             $params[':status'] = $filters['status'];
         }
 
-        // Filtro por prioridad
+        // Prioridad
         if (!empty($filters['priority'])) {
             $sql .= " AND t.priority = :priority";
             $params[':priority'] = $filters['priority'];
         }
 
-        // Filtro por usuario asignado
+        // Usuario asignado
         if (!empty($filters['assigned_user_id'])) {
             $sql .= " AND t.assigned_user_id = :assigned_user_id";
             $params[':assigned_user_id'] = $filters['assigned_user_id'];
         }
 
-        // Filtro por sucursal
+        // Sucursal
         if (!empty($filters['sucursal_id'])) {
             $sql .= " AND t.sucursal_id = :sucursal_id";
             $params[':sucursal_id'] = $filters['sucursal_id'];
         }
 
-        // Filtro por categoría
+        // Categoría
         if (!empty($filters['categoria_id'])) {
             $sql .= " AND t.categoria_id = :categoria_id";
             $params[':categoria_id'] = $filters['categoria_id'];
         }
 
-        $sql .= " ORDER BY t.fecha_asignacion DESC, t.horainicio ASC, t.priority DESC";
+        // Sin asignar
+        if (!empty($filters['sin_asignar'])) {
+            $sql .= " AND t.assigned_user_id IS NULL";
+        }
 
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        return $sql;
     }
 
     /**
-     * Obtiene tareas para un usuario (rol user)
-     * Ordenamiento: Prioridad > Estado > Deadline
-     * 
-     * @param int $userId ID del usuario
-     * @param array $filters Filtros opcionales
-     * @return array Lista de tareas
+     * Alias para compatibilidad - Admin
+     */
+    public function getAllForAdmin(array $filters = []): array
+    {
+        return $this->getAll($filters);
+    }
+
+    /**
+     * Obtiene tareas de un usuario específico.
+     */
+    public function getByUser(int $userId, array $filters = []): array
+    {
+        $filters['assigned_user_id'] = $userId;
+        return $this->getAll($filters);
+    }
+
+    /**
+     * Alias para compatibilidad - User
      */
     public function getAllForUser(int $userId, array $filters = []): array
     {
-        $sql = "SELECT 
-                    t.id,
-                    t.title,
-                    t.description,
-                    t.categoria_id,
-                    c.nombre AS categoria_nombre,
-                    c.color AS categoria_color,
-                    t.status,
-                    t.priority,
-                    t.deadline,
-                    t.fecha_asignacion,
-                    t.horainicio,
-                    t.horafin,
-                    t.sucursal_id,
-                    s.nombre AS sucursal_nombre,
-                    t.progreso,
-                    t.completed_at,
-                    t.evidence_image,
-                    t.completion_notes,
-                    t.created_at,
-                    t.updated_at
-                FROM tasks t
-                LEFT JOIN categorias c ON t.categoria_id = c.id
-                LEFT JOIN sucursales s ON t.sucursal_id = s.id
-                WHERE t.assigned_user_id = :user_id";
-
-        $params = [':user_id' => $userId];
-
-        // Filtro por fecha específica (mismo día)
-        if (!empty($filters['fecha'])) {
-            $sql .= " AND DATE(t.fecha_asignacion) = :fecha";
-            $params[':fecha'] = $filters['fecha'];
-        }
-
-        // Filtro por estado
-        if (!empty($filters['status'])) {
-            $sql .= " AND t.status = :status";
-            $params[':status'] = $filters['status'];
-        }
-
-        $sql .= " ORDER BY 
-                    FIELD(t.priority, 'high', 'medium', 'low'),
-                    CASE 
-                        WHEN t.status = 'completed' THEN 2
-                        WHEN t.status = 'inactive' THEN 3
-                        ELSE 1
-                    END,
-                    CASE WHEN t.deadline IS NULL THEN 1 ELSE 0 END,
-                    t.deadline ASC,
-                    t.horainicio ASC";
-
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        return $this->getByUser($userId, $filters);
     }
 
     /**
-     * Obtiene tareas disponibles para auto-asignación (solo del día actual)
-     * Solo tareas sin asignar y del mismo día
-     * 
-     * @return array Lista de tareas disponibles
+     * Obtiene tareas disponibles para auto-asignación (día actual, sin asignar).
      */
     public function getAvailableTasksForToday(): array
     {
-        $sql = "SELECT 
-                    t.id,
-                    t.title,
-                    t.description,
-                    t.categoria_id,
-                    c.nombre AS categoria_nombre,
-                    t.priority,
-                    t.deadline,
-                    t.fecha_asignacion,
-                    t.horainicio,
-                    t.horafin,
-                    t.sucursal_id,
-                    s.nombre AS sucursal_nombre
-                FROM tasks t
-                LEFT JOIN categorias c ON t.categoria_id = c.id
-                LEFT JOIN sucursales s ON t.sucursal_id = s.id
-                WHERE t.assigned_user_id IS NULL
-                  AND t.status IN ('pending')
-                  AND DATE(t.fecha_asignacion) = CURDATE()
-                ORDER BY 
-                    FIELD(t.priority, 'high', 'medium', 'low'),
-                    t.horainicio ASC";
-
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute();
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        return $this->getAll([
+            'fecha' => date('Y-m-d'),
+            'sin_asignar' => true,
+            'status' => TaskConfig::STATUS_PENDING
+        ]);
     }
 
     /**
-     * Obtiene una tarea por ID con información completa
-     * 
-     * @param int $taskId ID de la tarea
-     * @return array|false Datos de la tarea o false si no existe
+     * Obtiene tareas disponibles sin filtro de fecha.
+     */
+    public function getAvailableTasks(): array
+    {
+        return $this->getAll([
+            'sin_asignar' => true,
+            'status' => TaskConfig::STATUS_PENDING
+        ]);
+    }
+
+    /**
+     * Obtiene una tarea por ID con información completa.
      */
     public function getById(int $taskId)
     {
@@ -297,15 +266,22 @@ class TaskRepository
         $where = $userId ? "WHERE t.assigned_user_id = :user_id" : "";
         $params = $userId ? [':user_id' => $userId] : [];
 
+        $pending = TaskConfig::STATUS_PENDING;
+        $inProcess = TaskConfig::STATUS_IN_PROCESS;
+        $completed = TaskConfig::STATUS_COMPLETED;
+        $incomplete = TaskConfig::STATUS_INCOMPLETE;
+        $inactive = TaskConfig::STATUS_INACTIVE;
+        $highPriority = TaskConfig::PRIORITY_HIGH;
+
         $sql = "SELECT 
                     COUNT(*) as total,
-                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pendientes,
-                    SUM(CASE WHEN status = 'in_process' THEN 1 ELSE 0 END) as en_proceso,
-                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completadas,
-                    SUM(CASE WHEN status = 'incomplete' THEN 1 ELSE 0 END) as incompletas,
-                    SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) as inactivas,
-                    SUM(CASE WHEN priority = 'high' THEN 1 ELSE 0 END) as alta_prioridad,
-                    SUM(CASE WHEN deadline < CURDATE() AND status NOT IN ('completed', 'inactive') THEN 1 ELSE 0 END) as vencidas
+                    SUM(CASE WHEN status = '$pending' THEN 1 ELSE 0 END) as pendientes,
+                    SUM(CASE WHEN status = '$inProcess' THEN 1 ELSE 0 END) as en_proceso,
+                    SUM(CASE WHEN status = '$completed' THEN 1 ELSE 0 END) as completadas,
+                    SUM(CASE WHEN status = '$incomplete' THEN 1 ELSE 0 END) as incompletas,
+                    SUM(CASE WHEN status = '$inactive' THEN 1 ELSE 0 END) as inactivas,
+                    SUM(CASE WHEN priority = '$highPriority' THEN 1 ELSE 0 END) as alta_prioridad,
+                    SUM(CASE WHEN deadline < CURDATE() AND status NOT IN ('$completed', '$inactive') THEN 1 ELSE 0 END) as vencidas
                 FROM tasks t
                 $where";
 
@@ -316,15 +292,11 @@ class TaskRepository
     }
 
     // ============================================================
-    // SECCIÓN: OPERACIONES DE ESCRITURA - ADMIN
+    // OPERACIONES DE ESCRITURA
     // ============================================================
 
     /**
-     * Crea una nueva tarea (Admin only)
-     * 
-     * @param array $data Datos de la tarea
-     * @param int $createdByUserId ID del usuario que crea
-     * @return int|false ID de la tarea creada o false si falla
+     * Crea una nueva tarea.
      */
     public function create(array $data, int $createdByUserId)
     {
@@ -340,17 +312,16 @@ class TaskRepository
                     NOW(), NOW()
                 )";
 
-        // Calcular deadline si no se proporciona (2 días desde fecha_asignacion)
         $fechaAsignacion = $data['fecha_asignacion'] ?? date('Y-m-d');
-        $deadline = $data['deadline'] ?? date('Y-m-d', strtotime($fechaAsignacion . ' +2 days'));
+        $deadline = $data['deadline'] ?? TaskConfig::getDefaultDeadline($fechaAsignacion);
 
         $stmt = $this->db->prepare($sql);
         $result = $stmt->execute([
             ':title' => $data['title'],
             ':description' => $data['description'] ?? null,
             ':categoria_id' => $data['categoria_id'] ?? null,
-            ':status' => $data['status'] ?? 'pending',
-            ':priority' => $data['priority'] ?? 'medium',
+            ':status' => $data['status'] ?? TaskConfig::STATUS_PENDING,
+            ':priority' => $data['priority'] ?? TaskConfig::PRIORITY_MEDIUM,
             ':deadline' => $deadline,
             ':fecha_asignacion' => $fechaAsignacion,
             ':horainicio' => $data['horainicio'] ?? null,
@@ -362,7 +333,7 @@ class TaskRepository
 
         if ($result) {
             $taskId = (int)$this->db->lastInsertId();
-            $this->logHistory($taskId, $createdByUserId, 'created', null, json_encode($data));
+            Logger::info('Tarea creada', ['task_id' => $taskId, 'created_by' => $createdByUserId]);
             return $taskId;
         }
 
@@ -370,25 +341,18 @@ class TaskRepository
     }
 
     /**
-     * Actualiza una tarea existente (Admin only)
-     * 
-     * @param int $taskId ID de la tarea
-     * @param array $data Datos a actualizar
-     * @param int $userId ID del usuario que actualiza
-     * @return bool
+     * Actualiza una tarea existente.
      */
-    public function update(int $taskId, array $data, int $userId): bool
+    public function update(int $taskId, array $data, ?int $userId = null): bool
     {
-        $oldData = $this->getById($taskId);
-        
-        $fields = [];
-        $params = [':task_id' => $taskId];
-
         $allowedFields = [
             'title', 'description', 'categoria_id', 'status', 'priority',
             'deadline', 'fecha_asignacion', 'horainicio', 'horafin',
             'assigned_user_id', 'sucursal_id', 'progreso'
         ];
+
+        $fields = [];
+        $params = [':task_id' => $taskId];
 
         foreach ($allowedFields as $field) {
             if (array_key_exists($field, $data)) {
@@ -408,26 +372,21 @@ class TaskRepository
         $result = $stmt->execute($params);
 
         if ($result) {
-            $this->logHistory($taskId, $userId, 'updated', json_encode($oldData), json_encode($data));
+            Logger::info('Tarea actualizada', ['task_id' => $taskId, 'fields' => array_keys($data)]);
         }
 
         return $result;
     }
 
     /**
-     * Asigna una tarea a un usuario (Admin o auto-asignación)
-     * 
-     * @param int $taskId ID de la tarea
-     * @param int $userId ID del usuario a asignar
-     * @param int $assignedBy ID del usuario que asigna
-     * @return bool
+     * Asigna una tarea a un usuario.
      */
-    public function assign(int $taskId, int $userId, int $assignedBy): bool
+    public function assign(int $taskId, int $userId, ?int $assignedBy = null): bool
     {
         $sql = "UPDATE tasks 
                 SET assigned_user_id = :user_id,
                     status = CASE 
-                        WHEN status = 'pending' THEN 'in_process'
+                        WHEN status = :pending THEN :in_process
                         ELSE status 
                     END,
                     updated_at = NOW()
@@ -436,122 +395,174 @@ class TaskRepository
         $stmt = $this->db->prepare($sql);
         $result = $stmt->execute([
             ':user_id' => $userId,
+            ':pending' => TaskConfig::STATUS_PENDING,
+            ':in_process' => TaskConfig::STATUS_IN_PROCESS,
             ':task_id' => $taskId
         ]);
 
         if ($result) {
-            $this->logHistory($taskId, $assignedBy, 'assigned', null, "Asignado a usuario ID: $userId");
-            $this->updateUserTaskCount($userId, 1);
+            Logger::info('Tarea asignada', [
+                'task_id' => $taskId,
+                'assigned_to' => $userId,
+                'assigned_by' => $assignedBy ?? $userId
+            ]);
         }
 
         return $result;
     }
 
     /**
-     * Reabre una tarea completada o incompleta (Admin only)
-     * 
-     * @param int $taskId ID de la tarea
-     * @param int $userId ID del admin que reabre
-     * @param string $motivo Motivo de reapertura
-     * @param string|null $observaciones Observaciones adicionales
-     * @return bool
+     * Reabre una tarea completada o incompleta.
+     * Guarda historial en task_reaperturas.
      */
-    public function reopen(int $taskId, int $userId, string $motivo, ?string $observaciones = null): bool
+    public function reopen(int $taskId, int $userId, string $motivo, ?string $observaciones = null, array $newData = []): bool
     {
-        $sql = "UPDATE tasks 
-                SET status = 'pending',
-                    motivo_reapertura = :motivo,
-                    observaciones_reapertura = :observaciones,
-                    reabierta_por = :user_id,
-                    fecha_reapertura = NOW(),
-                    completed_at = NULL,
-                    evidence_image = NULL,
-                    completion_notes = NULL,
-                    progreso = 0,
-                    updated_at = NOW()
-                WHERE id = :task_id";
+        // Obtener datos actuales para historial
+        $current = $this->getById($taskId);
+        if (!$current) {
+            return false;
+        }
 
-        $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute([
-            ':motivo' => $motivo,
-            ':observaciones' => $observaciones,
+        // Guardar historial de reapertura
+        $this->saveReopenHistory($taskId, $userId, $motivo, $observaciones, $current, $newData);
+
+        // Actualizar tarea
+        $sql = "UPDATE tasks 
+                SET status = :pending,
+                    reopened_at = NOW(),
+                    reabierta_por = :user_id,
+                    completed_at = NULL,
+                    progreso = 0,
+                    updated_at = NOW()";
+
+        $params = [
+            ':pending' => TaskConfig::STATUS_PENDING,
             ':user_id' => $userId,
             ':task_id' => $taskId
+        ];
+
+        // Aplicar nuevos datos si se proporcionan
+        if (!empty($newData['assigned_user_id'])) {
+            $sql .= ", assigned_user_id = :new_assigned";
+            $params[':new_assigned'] = $newData['assigned_user_id'];
+        }
+        if (!empty($newData['deadline'])) {
+            $sql .= ", deadline = :new_deadline";
+            $params[':new_deadline'] = $newData['deadline'];
+        }
+        if (!empty($newData['priority'])) {
+            $sql .= ", priority = :new_priority";
+            $params[':new_priority'] = $newData['priority'];
+        }
+
+        $sql .= " WHERE id = :task_id";
+
+        $stmt = $this->db->prepare($sql);
+        $result = $stmt->execute($params);
+
+        if ($result) {
+            Logger::info('Tarea reabierta', [
+                'task_id' => $taskId,
+                'reopened_by' => $userId,
+                'motivo' => $motivo
+            ]);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Guarda historial de reapertura.
+     */
+    private function saveReopenHistory(int $taskId, int $userId, string $motivo, ?string $observaciones, array $current, array $newData): void
+    {
+        try {
+            $sql = "INSERT INTO task_reaperturas (
+                        task_id, reopened_by, motivo, observaciones,
+                        previous_status, previous_assigned_user_id, previous_deadline,
+                        previous_priority, previous_completed_at,
+                        new_assigned_user_id, new_deadline, new_priority,
+                        reopened_at
+                    ) VALUES (
+                        :task_id, :reopened_by, :motivo, :observaciones,
+                        :prev_status, :prev_assigned, :prev_deadline,
+                        :prev_priority, :prev_completed,
+                        :new_assigned, :new_deadline, :new_priority,
+                        NOW()
+                    )";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                ':task_id' => $taskId,
+                ':reopened_by' => $userId,
+                ':motivo' => $motivo,
+                ':observaciones' => $observaciones,
+                ':prev_status' => $current['status'],
+                ':prev_assigned' => $current['assigned_user_id'],
+                ':prev_deadline' => $current['deadline'],
+                ':prev_priority' => $current['priority'],
+                ':prev_completed' => $current['completed_at'],
+                ':new_assigned' => $newData['assigned_user_id'] ?? $current['assigned_user_id'],
+                ':new_deadline' => $newData['deadline'] ?? $current['deadline'],
+                ':new_priority' => $newData['priority'] ?? $current['priority']
+            ]);
+        } catch (Exception $e) {
+            Logger::warning('Failed to save reopen history: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Elimina (inactiva) una tarea.
+     */
+    public function delete(int $taskId, ?int $userId = null): bool
+    {
+        $sql = "UPDATE tasks SET status = :inactive, updated_at = NOW() WHERE id = :task_id";
+        
+        $stmt = $this->db->prepare($sql);
+        $result = $stmt->execute([
+            ':inactive' => TaskConfig::STATUS_INACTIVE,
+            ':task_id' => $taskId
         ]);
 
         if ($result) {
-            $this->logHistory($taskId, $userId, 'reopened', null, "Motivo: $motivo");
+            Logger::info('Tarea eliminada (inactivada)', ['task_id' => $taskId]);
         }
 
         return $result;
     }
 
     /**
-     * Elimina una tarea (Admin only - soft delete cambiando a inactive)
-     * 
-     * @param int $taskId ID de la tarea
-     * @param int $userId ID del usuario que elimina
-     * @return bool
-     */
-    public function delete(int $taskId, int $userId): bool
-    {
-        $sql = "UPDATE tasks SET status = 'inactive', updated_at = NOW() WHERE id = :task_id";
-        
-        $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute([':task_id' => $taskId]);
-
-        if ($result) {
-            $this->logHistory($taskId, $userId, 'deleted', null, 'Tarea marcada como inactiva');
-        }
-
-        return $result;
-    }
-
-    // ============================================================
-    // SECCIÓN: OPERACIONES DE ESCRITURA - USER
-    // ============================================================
-
-    /**
-     * Usuario se auto-asigna una tarea disponible del día actual
-     * 
-     * @param int $taskId ID de la tarea
-     * @param int $userId ID del usuario
-     * @return bool
+     * Usuario se auto-asigna una tarea disponible del día actual.
      */
     public function selfAssign(int $taskId, int $userId): bool
     {
-        // Verificar que la tarea esté disponible y sea del día actual
         $sql = "SELECT id FROM tasks 
                 WHERE id = :task_id 
                   AND assigned_user_id IS NULL 
-                  AND status = 'pending'
+                  AND status = :pending
                   AND DATE(fecha_asignacion) = CURDATE()";
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':task_id' => $taskId]);
+        $stmt->execute([
+            ':task_id' => $taskId,
+            ':pending' => TaskConfig::STATUS_PENDING
+        ]);
 
         if (!$stmt->fetch()) {
-            return false; // Tarea no disponible o no es del día actual
+            return false;
         }
 
         return $this->assign($taskId, $userId, $userId);
     }
 
     /**
-     * Completa una tarea con observaciones e imagen de evidencia
-     * 
-     * @param int $taskId ID de la tarea
-     * @param int $userId ID del usuario
-     * @param string $observaciones Observaciones del completado
-     * @param string|null $evidencePath Ruta de la imagen de evidencia
-     * @return bool
+     * Completa una tarea con observaciones.
      */
     public function complete(int $taskId, int $userId, string $observaciones, ?string $evidencePath = null): bool
     {
         $sql = "UPDATE tasks 
-                SET status = 'completed',
+                SET status = :completed,
                     completion_notes = :observaciones,
-                    evidence_image = :evidence_path,
                     progreso = 100,
                     completed_at = NOW(),
                     updated_at = NOW()
@@ -560,15 +571,14 @@ class TaskRepository
 
         $stmt = $this->db->prepare($sql);
         $result = $stmt->execute([
+            ':completed' => TaskConfig::STATUS_COMPLETED,
             ':observaciones' => $observaciones,
-            ':evidence_path' => $evidencePath,
             ':task_id' => $taskId,
             ':user_id' => $userId
         ]);
 
         if ($result && $stmt->rowCount() > 0) {
-            $this->logHistory($taskId, $userId, 'completed', null, $observaciones);
-            $this->updateUserTaskCount($userId, -1);
+            Logger::info('Tarea completada', ['task_id' => $taskId, 'user_id' => $userId]);
             return true;
         }
 
@@ -576,22 +586,19 @@ class TaskRepository
     }
 
     /**
-     * Actualiza el progreso de una tarea
-     * 
-     * @param int $taskId ID de la tarea
-     * @param int $userId ID del usuario
-     * @param int $progreso Porcentaje de progreso (0-100)
-     * @return bool
+     * Actualiza el progreso de una tarea.
      */
     public function updateProgress(int $taskId, int $userId, int $progreso): bool
     {
         $progreso = max(0, min(100, $progreso));
+        $completed = TaskConfig::STATUS_COMPLETED;
+        $inProcess = TaskConfig::STATUS_IN_PROCESS;
 
         $sql = "UPDATE tasks 
                 SET progreso = :progreso,
                     status = CASE 
-                        WHEN :progreso2 = 100 THEN 'completed'
-                        WHEN :progreso3 > 0 THEN 'in_process'
+                        WHEN :progreso2 = 100 THEN '$completed'
+                        WHEN :progreso3 > 0 THEN '$inProcess'
                         ELSE status
                     END,
                     completed_at = CASE WHEN :progreso4 = 100 THEN NOW() ELSE completed_at END,
@@ -611,21 +618,41 @@ class TaskRepository
     }
 
     // ============================================================
-    // SECCIÓN: EVIDENCIAS
+    // EVIDENCIAS (task_evidencias + evidencia_imagenes)
     // ============================================================
 
     /**
-     * Agrega evidencia (imagen) a una tarea
-     * Valida tamaño máximo de 1.5MB
+     * Determina el tipo de evidencia basado en el MIME type.
+     * Usa constantes de TaskConfig.
+     */
+    private function getEvidenceTipo(string $mimeType): string
+    {
+        if (strpos($mimeType, 'image/') === 0) {
+            return TaskConfig::EVIDENCE_TYPE_IMAGE;
+        } elseif (strpos($mimeType, 'application/pdf') === 0 || 
+                  strpos($mimeType, 'application/msword') === 0 ||
+                  strpos($mimeType, 'application/vnd.') === 0 ||
+                  strpos($mimeType, 'text/') === 0) {
+            return TaskConfig::EVIDENCE_TYPE_DOCUMENT;
+        }
+        return TaskConfig::EVIDENCE_TYPE_OTHER;
+    }
+
+    /**
+     * Agrega evidencia a una tarea.
+     * 
+     * Flujo:
+     * 1. Inserta registro padre en task_evidencias
+     * 2. Inserta imagen/archivo en evidencia_imagenes
      * 
      * @param int $taskId ID de la tarea
-     * @param int $userId ID del usuario
-     * @param string $filePath Ruta del archivo
-     * @param string $fileName Nombre del archivo
+     * @param int $userId ID del usuario que sube
+     * @param string $filePath Ruta del archivo guardado
+     * @param string $fileName Nombre original del archivo
      * @param int $fileSizeKb Tamaño en KB
-     * @param string $mimeType Tipo MIME
-     * @param string|null $observaciones Observaciones
-     * @return int|false ID de la evidencia o false si falla
+     * @param string $mimeType Tipo MIME del archivo
+     * @param string|null $observaciones Notas opcionales
+     * @return int|false ID de la evidencia creada o false
      */
     public function addEvidence(
         int $taskId, 
@@ -636,74 +663,267 @@ class TaskRepository
         string $mimeType,
         ?string $observaciones = null
     ) {
-        // Validar tamaño máximo (1.5 MB = 1536 KB)
-        if ($fileSizeKb > 1536) {
+        // Validar tamaño máximo
+        if ($fileSizeKb > TaskConfig::MAX_FILE_SIZE_KB) {
+            Logger::warning('Evidencia rechazada: tamaño excedido', [
+                'file' => $fileName, 
+                'size_kb' => $fileSizeKb, 
+                'max_kb' => TaskConfig::MAX_FILE_SIZE_KB
+            ]);
             return false;
         }
 
         // Validar tipos permitidos
-        $allowedMimes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
-        if (!in_array($mimeType, $allowedMimes)) {
+        if (!in_array($mimeType, TaskConfig::ALLOWED_MIME_TYPES)) {
+            Logger::warning('Evidencia rechazada: tipo no permitido', [
+                'file' => $fileName, 
+                'mime' => $mimeType
+            ]);
             return false;
         }
 
-        $sql = "INSERT INTO task_evidence (
-                    task_id, user_id, file_path, file_name, 
-                    file_size_kb, mime_type, observaciones, uploaded_at
-                ) VALUES (
-                    :task_id, :user_id, :file_path, :file_name,
-                    :file_size_kb, :mime_type, :observaciones, NOW()
-                )";
+        $this->db->beginTransaction();
 
-        $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute([
-            ':task_id' => $taskId,
-            ':user_id' => $userId,
-            ':file_path' => $filePath,
-            ':file_name' => $fileName,
-            ':file_size_kb' => $fileSizeKb,
-            ':mime_type' => $mimeType,
-            ':observaciones' => $observaciones
-        ]);
+        try {
+            // 1. Insertar en task_evidencias (tabla padre)
+            $tipo = $this->getEvidenceTipo($mimeType);
+            $sqlEvidencia = "INSERT INTO task_evidencias (
+                                task_id, archivo, tipo, nombre_original, tamanio, uploaded_by, created_at
+                            ) VALUES (
+                                :task_id, :archivo, :tipo, :nombre_original, :tamanio, :uploaded_by, NOW()
+                            )";
 
-        return $result ? (int)$this->db->lastInsertId() : false;
+            $stmt = $this->db->prepare($sqlEvidencia);
+            $stmt->execute([
+                ':task_id' => $taskId,
+                ':archivo' => $filePath,
+                ':tipo' => $tipo,
+                ':nombre_original' => $fileName,
+                ':tamanio' => $fileSizeKb * 1024, // Convertir a bytes
+                ':uploaded_by' => $userId
+            ]);
+
+            $evidenciaId = (int)$this->db->lastInsertId();
+
+            // 2. Insertar en evidencia_imagenes (tabla hija)
+            $sqlImagen = "INSERT INTO evidencia_imagenes (
+                            evidencia_id, file_path, file_name, file_size_kb, mime_type, uploaded_at
+                          ) VALUES (
+                            :evidencia_id, :file_path, :file_name, :file_size_kb, :mime_type, NOW()
+                          )";
+
+            $stmtImg = $this->db->prepare($sqlImagen);
+            $stmtImg->execute([
+                ':evidencia_id' => $evidenciaId,
+                ':file_path' => $filePath,
+                ':file_name' => $fileName,
+                ':file_size_kb' => $fileSizeKb,
+                ':mime_type' => $mimeType
+            ]);
+
+            $this->db->commit();
+
+            Logger::info('Evidencia agregada', [
+                'task_id' => $taskId, 
+                'evidencia_id' => $evidenciaId,
+                'file' => $fileName,
+                'tipo' => $tipo
+            ]);
+
+            return $evidenciaId;
+
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            Logger::error('Error al agregar evidencia: ' . $e->getMessage(), [
+                'task_id' => $taskId,
+                'file' => $fileName
+            ]);
+            return false;
+        }
     }
 
     /**
-     * Obtiene las evidencias de una tarea
+     * Agrega múltiples imágenes a una evidencia existente.
+     * Útil para cuando se suben varias imágenes en una sola evidencia.
      * 
-     * @param int $taskId ID de la tarea
-     * @return array Lista de evidencias
+     * @param int $evidenciaId ID de la evidencia padre
+     * @param array $images Array de ['file_path', 'file_name', 'file_size_kb', 'mime_type']
+     * @return bool
+     */
+    public function addImagesToEvidence(int $evidenciaId, array $images): bool
+    {
+        $sql = "INSERT INTO evidencia_imagenes (
+                    evidencia_id, file_path, file_name, file_size_kb, mime_type, uploaded_at
+                ) VALUES (
+                    :evidencia_id, :file_path, :file_name, :file_size_kb, :mime_type, NOW()
+                )";
+
+        $stmt = $this->db->prepare($sql);
+
+        foreach ($images as $img) {
+            $result = $stmt->execute([
+                ':evidencia_id' => $evidenciaId,
+                ':file_path' => $img['file_path'],
+                ':file_name' => $img['file_name'],
+                ':file_size_kb' => $img['file_size_kb'],
+                ':mime_type' => $img['mime_type']
+            ]);
+
+            if (!$result) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Obtiene las evidencias de una tarea con sus imágenes asociadas.
+     * 
+     * Retorna estructura anidada:
+     * [
+     *   {
+     *     id, tipo, nombre_original, tamanio, uploaded_by, created_at,
+     *     imagenes: [{ id, file_path, file_name, file_size_kb, mime_type }]
+     *   }
+     * ]
      */
     public function getEvidenceByTaskId(int $taskId): array
     {
+        // 1. Obtener evidencias padre
+        $sqlEvidencias = "SELECT 
+                            te.id,
+                            te.archivo AS file_path,
+                            te.tipo,
+                            te.nombre_original AS file_name,
+                            te.tamanio AS file_size_bytes,
+                            te.uploaded_by AS uploaded_by_id,
+                            CONCAT(u.nombre, ' ', u.apellido) AS uploaded_by_name,
+                            te.created_at AS uploaded_at
+                          FROM task_evidencias te
+                          LEFT JOIN users u ON te.uploaded_by = u.id
+                          WHERE te.task_id = :task_id
+                          ORDER BY te.created_at DESC";
+
+        $stmt = $this->db->prepare($sqlEvidencias);
+        $stmt->execute([':task_id' => $taskId]);
+        $evidencias = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($evidencias)) {
+            return [];
+        }
+
+        // 2. Obtener todas las imágenes de estas evidencias
+        $evidenciaIds = array_column($evidencias, 'id');
+        $placeholders = implode(',', array_fill(0, count($evidenciaIds), '?'));
+
+        $sqlImagenes = "SELECT 
+                            id,
+                            evidencia_id,
+                            file_path,
+                            file_name,
+                            file_size_kb,
+                            mime_type,
+                            uploaded_at
+                        FROM evidencia_imagenes
+                        WHERE evidencia_id IN ($placeholders)
+                        ORDER BY uploaded_at ASC";
+
+        $stmtImg = $this->db->prepare($sqlImagenes);
+        $stmtImg->execute($evidenciaIds);
+        $imagenes = $stmtImg->fetchAll(PDO::FETCH_ASSOC);
+
+        // 3. Agrupar imágenes por evidencia_id
+        $imagenesByEvidencia = [];
+        foreach ($imagenes as $img) {
+            $imagenesByEvidencia[$img['evidencia_id']][] = $img;
+        }
+
+        // 4. Combinar evidencias con sus imágenes
+        foreach ($evidencias as &$ev) {
+            $ev['imagenes'] = $imagenesByEvidencia[$ev['id']] ?? [];
+        }
+
+        return $evidencias;
+    }
+
+    /**
+     * Obtiene imágenes de una evidencia específica.
+     */
+    public function getImagesByEvidenceId(int $evidenciaId): array
+    {
         $sql = "SELECT 
-                    te.id,
-                    te.file_path,
-                    te.file_name,
-                    te.file_size_kb,
-                    te.mime_type,
-                    te.observaciones,
-                    te.uploaded_at,
-                    u.username,
-                    CONCAT(u.nombre, ' ', u.apellido) AS uploaded_by
-                FROM task_evidence te
-                LEFT JOIN users u ON te.user_id = u.id
-                WHERE te.task_id = :task_id
-                ORDER BY te.uploaded_at DESC";
+                    id,
+                    file_path,
+                    file_name,
+                    file_size_kb,
+                    mime_type,
+                    uploaded_at
+                FROM evidencia_imagenes
+                WHERE evidencia_id = :evidencia_id
+                ORDER BY uploaded_at ASC";
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':task_id' => $taskId]);
+        $stmt->execute([':evidencia_id' => $evidenciaId]);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Elimina una evidencia y sus imágenes asociadas (CASCADE).
+     */
+    public function deleteEvidence(int $evidenciaId, ?int $userId = null): bool
+    {
+        // ON DELETE CASCADE se encarga de eliminar evidencia_imagenes
+        $sql = "DELETE FROM task_evidencias WHERE id = :id";
+        
+        $stmt = $this->db->prepare($sql);
+        $result = $stmt->execute([':id' => $evidenciaId]);
+
+        if ($result) {
+            Logger::info('Evidencia eliminada', [
+                'evidencia_id' => $evidenciaId,
+                'deleted_by' => $userId
+            ]);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Cuenta evidencias de una tarea.
+     */
+    public function countEvidencesByTaskId(int $taskId): int
+    {
+        $sql = "SELECT COUNT(*) FROM task_evidencias WHERE task_id = :task_id";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':task_id' => $taskId]);
+
+        return (int)$stmt->fetchColumn();
+    }
+
+    /**
+     * Cuenta total de imágenes en todas las evidencias de una tarea.
+     */
+    public function countImagesByTaskId(int $taskId): int
+    {
+        $sql = "SELECT COUNT(*) 
+                FROM evidencia_imagenes ei
+                INNER JOIN task_evidencias te ON ei.evidencia_id = te.id
+                WHERE te.task_id = :task_id";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':task_id' => $taskId]);
+
+        return (int)$stmt->fetchColumn();
+    }
+
     // ============================================================
-    // SECCIÓN: VERIFICACIONES Y UTILIDADES
+    // VERIFICACIONES
     // ============================================================
 
     /**
-     * Verifica si una tarea existe
+     * Verifica si una tarea existe.
      */
     public function exists(int $taskId): bool
     {
@@ -732,55 +952,27 @@ class TaskRepository
     }
 
     /**
-     * Verifica si una tarea está disponible para asignar
+     * Verifica si una tarea está disponible para asignar.
      */
     public function isAvailable(int $taskId): bool
     {
-        $sql = "SELECT assigned_user_id FROM tasks WHERE id = :id AND status = 'pending'";
+        $sql = "SELECT assigned_user_id, status FROM tasks WHERE id = :id";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':id' => $taskId]);
 
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        return $result && $result['assigned_user_id'] === null;
+        return $result 
+            && $result['assigned_user_id'] === null 
+            && $result['status'] === TaskConfig::STATUS_PENDING;
     }
 
-    /**
-     * Obtiene tareas disponibles (sin asignar) para usuarios
-     */
-    public function getAvailableTasks(): array
-    {
-        $sql = "SELECT 
-                    t.id,
-                    t.title,
-                    t.description,
-                    t.categoria_id,
-                    c.nombre AS categoria_nombre,
-                    t.priority,
-                    t.deadline,
-                    t.fecha_asignacion,
-                    t.horainicio,
-                    t.horafin,
-                    t.sucursal_id,
-                    s.nombre AS sucursal_nombre
-                FROM tasks t
-                LEFT JOIN categorias c ON t.categoria_id = c.id
-                LEFT JOIN sucursales s ON t.sucursal_id = s.id
-                WHERE t.assigned_user_id IS NULL
-                  AND t.status IN ('pending')
-                ORDER BY 
-                    FIELD(t.priority, 'high', 'medium', 'low'),
-                    t.fecha_asignacion ASC,
-                    t.horainicio ASC";
-
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute();
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
+    // ============================================================
+    // UTILIDADES
+    // ============================================================
 
     /**
-     * Verifica si un usuario existe
+     * Verifica si un usuario existe.
      */
     public function userExists(int $userId): bool
     {
@@ -792,7 +984,7 @@ class TaskRepository
     }
 
     /**
-     * Obtiene el nombre de usuario por ID
+     * Obtiene el nombre completo de un usuario.
      */
     public function getUsernameById(int $userId): ?string
     {
@@ -801,24 +993,29 @@ class TaskRepository
         $stmt->execute([':id' => $userId]);
 
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
-        
         return $result ? $result['fullname'] : null;
     }
 
     /**
-     * Obtiene usuarios disponibles para asignación
+     * Obtiene usuarios disponibles para asignación.
      */
     public function getAvailableUsers(): array
     {
+        $pending = TaskConfig::STATUS_PENDING;
+        $inProcess = TaskConfig::STATUS_IN_PROCESS;
+        $roleUser = TaskConfig::ROLE_USER;
+
         $sql = "SELECT 
                     u.id, 
                     u.username, 
                     CONCAT(COALESCE(u.nombre, ''), ' ', COALESCE(u.apellido, '')) AS nombre_completo,
                     COALESCE(u.departamento, '') AS departamento,
                     COALESCE(u.estado, 'Disponible') AS estado,
-                    (SELECT COUNT(*) FROM tasks t WHERE t.assigned_user_id = u.id AND t.status IN ('pending', 'in_process')) AS tareas_activas
+                    (SELECT COUNT(*) FROM tasks t 
+                     WHERE t.assigned_user_id = u.id 
+                     AND t.status IN ('$pending', '$inProcess')) AS tareas_activas
                 FROM users u
-                WHERE u.role = 'user' 
+                WHERE u.role = '$roleUser' 
                   AND u.is_active = 1
                 ORDER BY u.nombre ASC";
 
@@ -829,56 +1026,15 @@ class TaskRepository
     }
 
     /**
-     * Registra historial de cambios
-     */
-    private function logHistory(int $taskId, int $userId, string $action, ?string $previousValue, ?string $newValue): void
-    {
-        try {
-            $sql = "INSERT INTO task_history (task_id, user_id, action, previous_value, new_value, created_at)
-                    VALUES (:task_id, :user_id, :action, :previous_value, :new_value, NOW())";
-
-            $stmt = $this->db->prepare($sql);
-            $stmt->execute([
-                ':task_id' => $taskId,
-                ':user_id' => $userId,
-                ':action' => $action,
-                ':previous_value' => $previousValue,
-                ':new_value' => $newValue
-            ]);
-        } catch (Exception $e) {
-            // Log silently fails - no interrumpir la operación principal
-            Logger::warning('Failed to log task history: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Actualiza contador de tareas activas del usuario
-     */
-    private function updateUserTaskCount(int $userId, int $increment): void
-    {
-        try {
-            $sql = "UPDATE users SET tareas_activas = GREATEST(0, tareas_activas + :increment) WHERE id = :user_id";
-            $stmt = $this->db->prepare($sql);
-            $stmt->execute([':increment' => $increment, ':user_id' => $userId]);
-        } catch (Exception $e) {
-            Logger::warning('Failed to update user task count: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Actualiza el estado de una tarea
-     * 
-     * @param int $taskId ID de la tarea
-     * @param string $status Nuevo estado
-     * @return bool
+     * Actualiza el estado de una tarea con validación.
      */
     public function updateStatus(int $taskId, string $status): bool
     {
-        $sql = "UPDATE tasks 
-                SET status = :status,
-                    updated_at = NOW()
-                WHERE id = :task_id";
+        if (!TaskConfig::isValidStatus($status)) {
+            return false;
+        }
 
+        $sql = "UPDATE tasks SET status = :status, updated_at = NOW() WHERE id = :task_id";
         $stmt = $this->db->prepare($sql);
         return $stmt->execute([
             ':status' => $status,
@@ -887,20 +1043,61 @@ class TaskRepository
     }
 
     /**
-     * Marca tareas vencidas como incompletas (2 días después del deadline)
+     * Marca tareas vencidas como inactivas automáticamente.
      */
     public function markOverdueTasks(): int
     {
+        $inactive = TaskConfig::STATUS_INACTIVE;
+        $pending = TaskConfig::STATUS_PENDING;
+        $inProcess = TaskConfig::STATUS_IN_PROCESS;
+        $days = TaskConfig::AUTO_INACTIVE_DAYS;
+
         $sql = "UPDATE tasks
-                SET status = 'incomplete',
+                SET status = '$inactive',
                     updated_at = NOW()
-                WHERE status IN ('pending', 'in_process')
-                  AND deadline IS NOT NULL
-                  AND deadline < DATE_SUB(CURDATE(), INTERVAL 2 DAY)";
+                WHERE status IN ('$pending', '$inProcess')
+                  AND (
+                      DATE_ADD(fecha_asignacion, INTERVAL $days DAY) < CURDATE()
+                      OR (deadline IS NOT NULL AND DATE_ADD(deadline, INTERVAL $days DAY) < CURDATE())
+                  )";
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute();
 
-        return $stmt->rowCount();
+        $count = $stmt->rowCount();
+        if ($count > 0) {
+            Logger::info("Tareas marcadas como inactivas: $count");
+        }
+
+        return $count;
+    }
+
+    /**
+     * Obtiene subtareas de una tarea.
+     */
+    public function getSubtareasByTaskId(int $taskId): array
+    {
+        $sql = "SELECT * FROM subtareas WHERE task_id = :task_id ORDER BY created_at ASC";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':task_id' => $taskId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Obtiene historial de reaperturas de una tarea.
+     */
+    public function getReopenHistory(int $taskId): array
+    {
+        $sql = "SELECT 
+                    tr.*,
+                    CONCAT(u.nombre, ' ', u.apellido) AS reopened_by_name
+                FROM task_reaperturas tr
+                LEFT JOIN users u ON tr.reopened_by = u.id
+                WHERE tr.task_id = :task_id
+                ORDER BY tr.reopened_at DESC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':task_id' => $taskId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }

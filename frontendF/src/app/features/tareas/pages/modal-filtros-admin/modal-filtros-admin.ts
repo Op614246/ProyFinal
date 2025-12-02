@@ -116,7 +116,6 @@ export class ModalFiltrosAdmin implements OnInit {
       filtros.cargo = this.filtroEstado;
     }
 
-    console.log('Filtros a aplicar (admin):', filtros);
     this.modalController.dismiss(filtros, 'filtros');
   }
 

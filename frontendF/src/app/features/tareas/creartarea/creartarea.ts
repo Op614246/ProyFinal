@@ -40,12 +40,23 @@ export class Creartarea implements OnInit {
   estadoActivo: boolean = true;
   
   // Fechas
-  fechaAsignacion: string = new Date().toISOString().split('T')[0];
+  // Fechas - Usar zona horaria local para evitar desfase UTC
+  fechaAsignacion: string = this.getLocalDateString();
   fechaLimite: string = '';
   horaInicio: string = '';
   horaFin: string = '';
-  minFechaAsignacion: string = new Date().toISOString().split('T')[0]; // Mínimo = hoy
-  
+  minFechaAsignacion: string = this.getLocalDateString(); // Mínimo = hoy
+
+  /**
+   * Obtener la fecha actual en formato YYYY-MM-DD usando zona horaria local
+   * Evita el problema de toISOString() que usa UTC y puede adelantar un día
+   */
+  private getLocalDateString(date: Date = new Date()): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
   // Modo edición
   modoEdicion: boolean = false;
   tareaId?: string;
@@ -331,8 +342,6 @@ export class Creartarea implements OnInit {
     if (this.asignarUsuario && this.usuarioSeleccionado) {
       tareaData.assigned_user_id = this.usuarioSeleccionado.id;
     }
-
-    console.log(this.modoEdicion ? 'Tarea editada:' : 'Nueva tarea creada:', tareaData);
     
     // Llamar al servicio para crear/editar la tarea
     this.tareasService.createTask(tareaData).subscribe({

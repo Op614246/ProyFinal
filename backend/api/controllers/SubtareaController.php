@@ -22,6 +22,8 @@ class SubtareaController {
      * GET /tasks/:taskId/subtareas
      */
     public function getSubtareasByTask($taskId) {
+
+
         try {
             $subtareas = $this->repository->getSubtareasByTaskId($taskId);
             $stats = $this->repository->getEstadisticasSubtareas($taskId);
@@ -56,6 +58,8 @@ class SubtareaController {
                 'data' => null
             ], 500);
         }
+
+        
     }
     
     /**

@@ -300,7 +300,6 @@ export class Tareas implements OnInit, OnDestroy {
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (response) => {
-            console.log('GET /admin response', response);
             if (response.tipo === 1) {
               // Separar tareas que ya están asignadas de las sin asignar
               const todas = response.data.tareas || [];
@@ -315,7 +314,6 @@ export class Tareas implements OnInit, OnDestroy {
                 .pipe(takeUntil(this.destroy$))
                 .subscribe({
                   next: (resSin) => {
-                    console.log('GET /admin?sin_asignar response', resSin);
                     if (resSin.tipo === 1) {
                       this.tareasSinAsignar = resSin.data.tareas || [];
                     } else {
@@ -331,7 +329,6 @@ export class Tareas implements OnInit, OnDestroy {
                     this.cdr.markForCheck();
                   }
                 });
-              console.log('tareas totals:', { todas: todas.length, tareasAdmin: this.tareasAdmin.length, tareasSinAsignar: this.tareasSinAsignar.length });
             } else {
               this.error = response.mensajes[0] || 'Error al cargar tareas';
             }
@@ -615,6 +612,23 @@ export class Tareas implements OnInit, OnDestroy {
     return `${diaNombre} ${diaNumero} ${mesNombre}`;
   }
 
+  /**
+   * Formatear fecha en formato corto DD/MM
+   * Acepta string YYYY-MM-DD o Date
+   */
+  formatearFechaCorta(fecha: string | Date | null | undefined): string {
+    if (!fecha) return '';
+    try {
+      const d = typeof fecha === 'string' ? new Date(fecha + 'T00:00:00') : fecha;
+      if (isNaN(d.getTime())) return String(fecha);
+      const dia = d.getDate().toString().padStart(2, '0');
+      const mes = (d.getMonth() + 1).toString().padStart(2, '0');
+      return `${dia}/${mes}`;
+    } catch (e) {
+      return String(fecha);
+    }
+  }
+
   private addDays(fecha: Date, dias: number): Date {
     const resultado = new Date(fecha);
     resultado.setDate(resultado.getDate() + dias);
@@ -759,7 +773,6 @@ export class Tareas implements OnInit, OnDestroy {
 
   // Procesar reapertura de tarea
   procesarReapertura(tareaId: string, datos: any): void {
-    console.log('Reaperturando tarea:', tareaId, datos);
     // Si se solicita reasignación y hay usuario seleccionado, usarlo.
     const hoyIso = this.formatearFechaISO(new Date());
     // Normalizar fecha de vencimiento: usar la fecha dada o reiniciar a hoy
@@ -857,7 +870,6 @@ export class Tareas implements OnInit, OnDestroy {
 
   // Procesar completar tarea
   procesarCompletarTarea(tareaId: string, datos: any): void {
-    console.log('Completando tarea:', tareaId, datos);
     this.tareasService.actualizarTareaAdmin(tareaId, { 
       estado: 'Completada',
       observaciones: datos.observaciones,

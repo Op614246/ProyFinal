@@ -125,6 +125,7 @@ export interface TareaAdmin {
   descripcion?: string;
   estado: 'Pendiente' | 'En progreso' | 'Completada' | 'Incompleta' | 'Inactiva';
   fechaAsignacion: string;
+  fechaVencimiento?: string; // deadline
   horaprogramada: string;
   horainicio: string;
   horafin: string;

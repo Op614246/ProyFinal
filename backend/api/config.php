@@ -4,6 +4,9 @@ error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
+// Configurar zona horaria para Perú (UTC-5)
+date_default_timezone_set('America/Lima');
+
 // Establecer charset UTF-8
 header('Content-Type: application/json; charset=utf-8');
 mb_internal_encoding('UTF-8');

@@ -1,0 +1,149 @@
+<?php
+/**
+ * TaskAdminController.php
+ * Controlador para tareas admin
+ */
+
+require_once __DIR__ . '/../repository/TaskRepository.php';
+require_once __DIR__ . '/../repository/EvidenciaRepository.php';
+require_once __DIR__ . '/../core/Logger.php';
+
+class TaskAdminController {
+    private $app;
+                        'tipo' => 2, 
+                        'mensajes' => ['La imagen excede el tamaño máximo de 1.5MB'], 
+                        'data' => null
+                    ], 400);
+                }
+                
+                // Validar tipo de archivo (solo imágenes)
+                $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                if (!in_array($file['type'], $allowedTypes)) {
+                    return $this->sendResponse([
+                        'tipo' => 2, 
+                        'mensajes' => ['Solo se permiten imágenes (JPEG, PNG, GIF, WebP)'], 
+                        'data' => null
+                    ], 400);
+                }
+                
+                // Crear directorio de uploads si no existe
+                $uploadDir = __DIR__ . '/../../uploads/evidencias/';
+                if (!is_dir($uploadDir)) {
+                    mkdir($uploadDir, 0755, true);
+                }
+                
+                // Generar nombre único
+                $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+                $fileName = 'tarea_' . $tareaId . '_' . time() . '.' . $extension;
+                $imagePath = 'uploads/evidencias/' . $fileName;
+                
+                // Mover archivo
+                if (!move_uploaded_file($file['tmp_name'], $uploadDir . $fileName)) {
+                    return $this->sendResponse([
+                        'tipo' => 3, 
+                        'mensajes' => ['Error al guardar la imagen'], 
+                        'data' => null
+                    ], 500);
+                }
+                
+                // Registrar evidencia en BD
+                $user = $this->app->user ?? null;
+                $userId = $user['id'] ?? $user['user_id'] ?? null;
+                $user = $this->app->user ?? null;
+                $userId = $user['id'] ?? $user['user_id'] ?? 3;
+                $this->evidencias->create(
+                    (int)$tareaId,
+                    $imagePath,
+                    (int)$userId,
+                    'imagen',
+                    $file['name'],
+                    (int)$file['size']
+                );
+            }
+            
+            $user = $this->app->user ?? null;
+            $userId = $user['id'] ?? $user['user_id'] ?? 3;
+            $this->repository->complete((int)$tareaId, (int)$userId, $observaciones, $imagePath);
+            $tarea = $this->repository->getById((int)$tareaId);
+            
+            $response = [
+                "tipo" => 1,
+                "mensajes" => ["Tarea completada correctamente"],
+                "data" => $tarea
+            ];
+            
+            Logger::info('Tarea completada', ['id' => $tareaId]);
+            return $this->sendResponse($response, 200);
+        } catch (Exception $e) {
+            Logger::error('Error al completar tarea', ['error' => $e->getMessage()]);
+            return $this->sendResponse(['tipo' => 3, 'mensajes' => ['Error al completar tarea'], 'data' => null], 500);
+        }
+    }
+
+    /**
+     * PUT /admin/tareas/:id/reabrir
+     * Reabrir tarea completada
+     */
+    public function reabrirTarea($tareaId) {
+        try {
+            $request = $this->app->request();
+            $data = json_decode($request->getBody(), true);
+            
+            $motivo = $data['motivo'] ?? '';
+            $observaciones = $data['observaciones'] ?? null;
+            
+            if (empty($motivo)) {
+                return $this->sendResponse([
+                    'tipo' => 2, 
+                    'mensajes' => ['El motivo de reapertura es requerido'], 
+                    'data' => null
+                ], 400);
+            }
+            
+            $user = $this->app->user ?? null;
+            $userId = $user['id'] ?? $user['user_id'] ?? 3;
+            $this->repository->reopen((int)$tareaId, (int)$userId, $motivo, $observaciones);
+            $tarea = $this->repository->getById((int)$tareaId);
+                $user = $this->app->user ?? null;
+                $userId = $user['id'] ?? $user['user_id'] ?? 3;
+                $this->repository->reopen((int)$tareaId, (int)$userId, $motivo, $observaciones);
+                $tarea = $this->repository->getById((int)$tareaId);
+            
+            $response = [
+                "tipo" => 1,
+                "mensajes" => ["Tarea reabierta correctamente"],
+                "data" => $tarea
+            ];
+            
+            Logger::info('Tarea reabierta', ['id' => $tareaId, 'motivo' => $motivo]);
+            return $this->sendResponse($response, 200);
+        } catch (Exception $e) {
+            Logger::error('Error al reabrir tarea', ['error' => $e->getMessage()]);
+            return $this->sendResponse(['tipo' => 3, 'mensajes' => ['Error al reabrir tarea'], 'data' => null], 500);
+        }
+    }
+    
+    /**
+     * Enviar respuesta
+     */
+    private function sendResponse($data, $statusCode = 200) {
+        $response = $this->app->response();
+        $response->header('Content-Type', 'application/json; charset=utf-8');
+        $response->status($statusCode);
+        
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        
+        // Si hay error de JSON, loguear y devolver error genérico
+        if ($json === false) {
+            Logger::error('Error al codificar JSON', ['error' => json_last_error_msg()]);
+            $json = json_encode([
+                'tipo' => 3,
+                'mensajes' => ['Error interno al procesar respuesta'],
+                'data' => null
+            ]);
+        }
+        
+        $response->body($json);
+    }
+}
+?>
