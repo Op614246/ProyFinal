@@ -590,7 +590,7 @@ export class TareasInfo implements OnInit {
     modal.onDidDismiss().then((result) => {
       if (result.role === 'confirm' && result.data) {
         const datos = result.data;
-        this.tareasService.finalizarTarea(this.tareaAdminSeleccionada!.id, datos.observaciones || '', datos.imagen)
+        this.tareasService.finalizarTarea(this.tareaAdminSeleccionada!.id, datos.observaciones || '', datos.imagenes)
           .subscribe({
             next: (response) => {
               if (response.tipo === 1) {

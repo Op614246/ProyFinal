@@ -49,7 +49,6 @@ class TaskRepository
                     s.nombre AS sucursal_nombre,
                     t.progreso,
                     t.completed_at,
-                    t.completion_notes,
                     t.reopened_at,
                     t.created_at,
                     t.updated_at,
@@ -199,6 +198,18 @@ class TaskRepository
     }
 
     /**
+     * Obtiene tareas disponibles con filtros aplicados.
+     */
+    public function getAvailableTasksFiltered(array $filters = []): array
+    {
+        // Forzar que sean sin asignar y pendientes
+        $filters['sin_asignar'] = true;
+        $filters['status'] = TaskConfig::STATUS_PENDING;
+        
+        return $this->getAll($filters);
+    }
+
+    /**
      * Obtiene una tarea por ID con información completa.
      */
     public function getById(int $taskId)
@@ -225,12 +236,9 @@ class TaskRepository
                     s.nombre AS sucursal_nombre,
                     t.progreso,
                     t.completed_at,
-                    t.evidence_image,
-                    t.completion_notes,
-                    t.motivo_reapertura,
-                    t.observaciones_reapertura,
+                    t.reopened_at,
+                    t.reabierta_por,
                     CONCAT(ur.nombre, ' ', ur.apellido) AS reabierta_por_name,
-                    t.fecha_reapertura,
                     t.created_at,
                     t.updated_at
                 FROM tasks t
@@ -250,9 +258,35 @@ class TaskRepository
         if ($task) {
             // Obtener evidencias
             $task['evidencias'] = $this->getEvidenceByTaskId($taskId);
+            
+            // Obtener última reapertura si existe
+            $lastReopen = $this->getLastReopenInfo($taskId);
+            if ($lastReopen) {
+                $task['motivo_reapertura'] = $lastReopen['motivo'];
+                $task['observaciones_reapertura'] = $lastReopen['observaciones'];
+                $task['fecha_reapertura'] = $lastReopen['reopened_at'];
+            }
         }
 
         return $task;
+    }
+    
+    /**
+     * Obtiene la última información de reapertura de una tarea
+     */
+    private function getLastReopenInfo(int $taskId): ?array
+    {
+        $sql = "SELECT motivo, observaciones, reopened_at 
+                FROM task_reaperturas 
+                WHERE task_id = :task_id 
+                ORDER BY reopened_at DESC 
+                LIMIT 1";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':task_id' => $taskId]);
+        
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $result ?: null;
     }
 
     /**
@@ -560,29 +594,62 @@ class TaskRepository
      */
     public function complete(int $taskId, int $userId, string $observaciones, ?string $evidencePath = null): bool
     {
-        $sql = "UPDATE tasks 
-                SET status = :completed,
-                    completion_notes = :observaciones,
-                    progreso = 100,
-                    completed_at = NOW(),
-                    updated_at = NOW()
-                WHERE id = :task_id
-                  AND assigned_user_id = :user_id";
+        try {
+            $this->db->beginTransaction();
+            
+            $sql = "UPDATE tasks 
+                    SET status = :completed,
+                        progreso = 100,
+                        completed_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = :task_id
+                      AND assigned_user_id = :user_id";
 
-        $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute([
-            ':completed' => TaskConfig::STATUS_COMPLETED,
-            ':observaciones' => $observaciones,
-            ':task_id' => $taskId,
-            ':user_id' => $userId
-        ]);
+            $stmt = $this->db->prepare($sql);
+            $result = $stmt->execute([
+                ':completed' => TaskConfig::STATUS_COMPLETED,
+                ':task_id' => $taskId,
+                ':user_id' => $userId
+            ]);
 
-        if ($result && $stmt->rowCount() > 0) {
-            Logger::info('Tarea completada', ['task_id' => $taskId, 'user_id' => $userId]);
-            return true;
+            if ($result && $stmt->rowCount() > 0) {
+                // Si hay evidencia, guardarla
+                if ($evidencePath) {
+                    $this->saveEvidence($taskId, $evidencePath, $userId);
+                }
+                
+                $this->db->commit();
+                Logger::info('Tarea completada', ['task_id' => $taskId, 'user_id' => $userId]);
+                return true;
+            }
+            
+            $this->db->rollBack();
+            return false;
+            
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            Logger::error('Error al completar tarea', [
+                'task_id' => $taskId,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
         }
-
-        return false;
+    }
+    
+    /**
+     * Guarda una evidencia para una tarea
+     */
+    private function saveEvidence(int $taskId, string $filePath, int $userId): void
+    {
+        $sql = "INSERT INTO task_evidencias (task_id, archivo, tipo, uploaded_by, created_at)
+                VALUES (:task_id, :archivo, 'imagen', :uploaded_by, NOW())";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':task_id' => $taskId,
+            ':archivo' => $filePath,
+            ':uploaded_by' => $userId
+        ]);
     }
 
     /**
@@ -639,20 +706,125 @@ class TaskRepository
     }
 
     /**
-     * Agrega evidencia a una tarea.
-     * 
-     * Flujo:
-     * 1. Inserta registro padre en task_evidencias
-     * 2. Inserta imagen/archivo en evidencia_imagenes
+     * Crea una evidencia para una tarea con observaciones.
+     * Solo crea el registro padre en task_evidencias.
+     * Las imágenes se agregan después con addImageToEvidence.
      * 
      * @param int $taskId ID de la tarea
      * @param int $userId ID del usuario que sube
+     * @param string $observaciones Observaciones de la evidencia
+     * @return int|false ID de la evidencia creada o false
+     */
+    public function createEvidence(int $taskId, int $userId, string $observaciones)
+    {
+        try {
+            $sql = "INSERT INTO task_evidencias (
+                        task_id, archivo, tipo, observaciones, uploaded_by, created_at
+                    ) VALUES (
+                        :task_id, '', 'imagen', :observaciones, :uploaded_by, NOW()
+                    )";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                ':task_id' => $taskId,
+                ':observaciones' => $observaciones,
+                ':uploaded_by' => $userId
+            ]);
+
+            $evidenciaId = (int)$this->db->lastInsertId();
+
+            Logger::info('Evidencia creada', [
+                'task_id' => $taskId, 
+                'evidencia_id' => $evidenciaId,
+                'user_id' => $userId
+            ]);
+
+            return $evidenciaId;
+
+        } catch (Exception $e) {
+            Logger::error('Error al crear evidencia: ' . $e->getMessage(), [
+                'task_id' => $taskId
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Agrega una imagen a una evidencia existente.
+     * 
+     * @param int $evidenciaId ID de la evidencia padre
      * @param string $filePath Ruta del archivo guardado
      * @param string $fileName Nombre original del archivo
      * @param int $fileSizeKb Tamaño en KB
      * @param string $mimeType Tipo MIME del archivo
-     * @param string|null $observaciones Notas opcionales
-     * @return int|false ID de la evidencia creada o false
+     * @return int|false ID de la imagen creada o false
+     */
+    public function addImageToEvidence(
+        int $evidenciaId,
+        string $filePath, 
+        string $fileName, 
+        int $fileSizeKb, 
+        string $mimeType
+    ) {
+        // Validar tamaño máximo
+        if ($fileSizeKb > TaskConfig::MAX_FILE_SIZE_KB) {
+            Logger::warning('Imagen rechazada: tamaño excedido', [
+                'file' => $fileName, 
+                'size_kb' => $fileSizeKb, 
+                'max_kb' => TaskConfig::MAX_FILE_SIZE_KB
+            ]);
+            return false;
+        }
+
+        // Validar tipos permitidos
+        if (!in_array($mimeType, TaskConfig::ALLOWED_MIME_TYPES)) {
+            Logger::warning('Imagen rechazada: tipo no permitido', [
+                'file' => $fileName, 
+                'mime' => $mimeType
+            ]);
+            return false;
+        }
+
+        try {
+            $sql = "INSERT INTO evidencia_imagenes (
+                        evidencia_id, file_path, file_name, file_size_kb, mime_type, uploaded_at
+                    ) VALUES (
+                        :evidencia_id, :file_path, :file_name, :file_size_kb, :mime_type, NOW()
+                    )";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                ':evidencia_id' => $evidenciaId,
+                ':file_path' => $filePath,
+                ':file_name' => $fileName,
+                ':file_size_kb' => $fileSizeKb,
+                ':mime_type' => $mimeType
+            ]);
+
+            $imagenId = (int)$this->db->lastInsertId();
+
+            Logger::info('Imagen agregada a evidencia', [
+                'evidencia_id' => $evidenciaId,
+                'imagen_id' => $imagenId,
+                'file' => $fileName
+            ]);
+
+            return $imagenId;
+
+        } catch (Exception $e) {
+            Logger::error('Error al agregar imagen: ' . $e->getMessage(), [
+                'evidencia_id' => $evidenciaId,
+                'file' => $fileName
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Agrega evidencia completa a una tarea (método legacy para compatibilidad).
+     * Crea evidencia con observaciones y agrega imagen.
+     * 
+     * @deprecated Usar createEvidence + addImageToEvidence
      */
     public function addEvidence(
         int $taskId, 
@@ -663,73 +835,26 @@ class TaskRepository
         string $mimeType,
         ?string $observaciones = null
     ) {
-        // Validar tamaño máximo
-        if ($fileSizeKb > TaskConfig::MAX_FILE_SIZE_KB) {
-            Logger::warning('Evidencia rechazada: tamaño excedido', [
-                'file' => $fileName, 
-                'size_kb' => $fileSizeKb, 
-                'max_kb' => TaskConfig::MAX_FILE_SIZE_KB
-            ]);
-            return false;
-        }
-
-        // Validar tipos permitidos
-        if (!in_array($mimeType, TaskConfig::ALLOWED_MIME_TYPES)) {
-            Logger::warning('Evidencia rechazada: tipo no permitido', [
-                'file' => $fileName, 
-                'mime' => $mimeType
-            ]);
-            return false;
-        }
-
         $this->db->beginTransaction();
 
         try {
-            // 1. Insertar en task_evidencias (tabla padre)
-            $tipo = $this->getEvidenceTipo($mimeType);
-            $sqlEvidencia = "INSERT INTO task_evidencias (
-                                task_id, archivo, tipo, nombre_original, tamanio, uploaded_by, created_at
-                            ) VALUES (
-                                :task_id, :archivo, :tipo, :nombre_original, :tamanio, :uploaded_by, NOW()
-                            )";
+            // 1. Crear evidencia con observaciones
+            $evidenciaId = $this->createEvidence($taskId, $userId, $observaciones ?? '');
+            
+            if (!$evidenciaId) {
+                $this->db->rollBack();
+                return false;
+            }
 
-            $stmt = $this->db->prepare($sqlEvidencia);
-            $stmt->execute([
-                ':task_id' => $taskId,
-                ':archivo' => $filePath,
-                ':tipo' => $tipo,
-                ':nombre_original' => $fileName,
-                ':tamanio' => $fileSizeKb * 1024, // Convertir a bytes
-                ':uploaded_by' => $userId
-            ]);
-
-            $evidenciaId = (int)$this->db->lastInsertId();
-
-            // 2. Insertar en evidencia_imagenes (tabla hija)
-            $sqlImagen = "INSERT INTO evidencia_imagenes (
-                            evidencia_id, file_path, file_name, file_size_kb, mime_type, uploaded_at
-                          ) VALUES (
-                            :evidencia_id, :file_path, :file_name, :file_size_kb, :mime_type, NOW()
-                          )";
-
-            $stmtImg = $this->db->prepare($sqlImagen);
-            $stmtImg->execute([
-                ':evidencia_id' => $evidenciaId,
-                ':file_path' => $filePath,
-                ':file_name' => $fileName,
-                ':file_size_kb' => $fileSizeKb,
-                ':mime_type' => $mimeType
-            ]);
+            // 2. Agregar imagen
+            $imagenId = $this->addImageToEvidence($evidenciaId, $filePath, $fileName, $fileSizeKb, $mimeType);
+            
+            if (!$imagenId) {
+                $this->db->rollBack();
+                return false;
+            }
 
             $this->db->commit();
-
-            Logger::info('Evidencia agregada', [
-                'task_id' => $taskId, 
-                'evidencia_id' => $evidenciaId,
-                'file' => $fileName,
-                'tipo' => $tipo
-            ]);
-
             return $evidenciaId;
 
         } catch (Exception $e) {
@@ -813,60 +938,19 @@ class TaskRepository
             return [];
         }
 
-        // 2. Obtener todas las imágenes de estas evidencias
-        $evidenciaIds = array_column($evidencias, 'id');
-        $placeholders = implode(',', array_fill(0, count($evidenciaIds), '?'));
-
-        $sqlImagenes = "SELECT 
-                            id,
-                            evidencia_id,
-                            file_path,
-                            file_name,
-                            file_size_kb,
-                            mime_type,
-                            uploaded_at
-                        FROM evidencia_imagenes
-                        WHERE evidencia_id IN ($placeholders)
-                        ORDER BY uploaded_at ASC";
-
-        $stmtImg = $this->db->prepare($sqlImagenes);
-        $stmtImg->execute($evidenciaIds);
-        $imagenes = $stmtImg->fetchAll(PDO::FETCH_ASSOC);
-
-        // 3. Agrupar imágenes por evidencia_id
-        $imagenesByEvidencia = [];
-        foreach ($imagenes as $img) {
-            $imagenesByEvidencia[$img['evidencia_id']][] = $img;
-        }
-
-        // 4. Combinar evidencias con sus imágenes
-        foreach ($evidencias as &$ev) {
-            $ev['imagenes'] = $imagenesByEvidencia[$ev['id']] ?? [];
-        }
-
+        // Las evidencias de tasks ya no usan tabla de imágenes separada
+        // Las imágenes ahora están en subtarea_evidencias
         return $evidencias;
     }
 
     /**
      * Obtiene imágenes de una evidencia específica.
+     * Nota: Ahora las evidencias principales están en subtarea_evidencias
      */
     public function getImagesByEvidenceId(int $evidenciaId): array
     {
-        $sql = "SELECT 
-                    id,
-                    file_path,
-                    file_name,
-                    file_size_kb,
-                    mime_type,
-                    uploaded_at
-                FROM evidencia_imagenes
-                WHERE evidencia_id = :evidencia_id
-                ORDER BY uploaded_at ASC";
-
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([':evidencia_id' => $evidenciaId]);
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Las imágenes ahora están en subtarea_evidencias, no en tabla separada
+        return [];
     }
 
     /**
@@ -904,13 +988,15 @@ class TaskRepository
 
     /**
      * Cuenta total de imágenes en todas las evidencias de una tarea.
+     * Nota: Las evidencias ahora están en las subtareas
      */
     public function countImagesByTaskId(int $taskId): int
     {
+        // Contar evidencias de subtareas en lugar de la tabla vieja
         $sql = "SELECT COUNT(*) 
-                FROM evidencia_imagenes ei
-                INNER JOIN task_evidencias te ON ei.evidencia_id = te.id
-                WHERE te.task_id = :task_id";
+                FROM subtarea_evidencias se
+                INNER JOIN subtareas s ON se.subtarea_id = s.id
+                WHERE s.task_id = :task_id";
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':task_id' => $taskId]);

@@ -9,7 +9,7 @@
 class TaskConfig
 {
     // ============================================================
-    // ESTADOS DE TAREA
+    // ESTADOS DE TAREA (Task - contenedor)
     // ============================================================
     const STATUS_PENDING = 'pending';
     const STATUS_IN_PROCESS = 'in_process';
@@ -41,7 +41,38 @@ class TaskConfig
     ];
 
     // ============================================================
-    // PRIORIDADES
+    // ESTADOS DE SUBTAREA (unidad de trabajo real)
+    // ============================================================
+    const SUBTAREA_PENDIENTE = 'Pendiente';
+    const SUBTAREA_EN_PROGRESO = 'En progreso';
+    const SUBTAREA_COMPLETADA = 'Completada';
+    const SUBTAREA_CERRADA = 'Cerrada';
+    const SUBTAREA_ACTIVO = 'Activo';
+    const SUBTAREA_INACTIVA = 'Inactiva';
+
+    const SUBTAREA_ESTADOS = [
+        self::SUBTAREA_PENDIENTE,
+        self::SUBTAREA_EN_PROGRESO,
+        self::SUBTAREA_COMPLETADA,
+        self::SUBTAREA_CERRADA,
+        self::SUBTAREA_ACTIVO,
+        self::SUBTAREA_INACTIVA
+    ];
+
+    // Estados de subtarea que permiten completar
+    const SUBTAREA_COMPLETABLE_ESTADOS = [
+        self::SUBTAREA_PENDIENTE,
+        self::SUBTAREA_EN_PROGRESO
+    ];
+
+    // Estados de subtarea que permiten reabrir
+    const SUBTAREA_REOPENABLE_ESTADOS = [
+        self::SUBTAREA_COMPLETADA,
+        self::SUBTAREA_CERRADA
+    ];
+
+    // ============================================================
+    // PRIORIDADES (compartidas entre tasks y subtareas)
     // ============================================================
     const PRIORITY_HIGH = 'high';
     const PRIORITY_MEDIUM = 'medium';
@@ -51,6 +82,17 @@ class TaskConfig
         self::PRIORITY_HIGH,
         self::PRIORITY_MEDIUM,
         self::PRIORITY_LOW
+    ];
+
+    // Prioridades de subtarea (formato español)
+    const SUBTAREA_PRIORIDAD_ALTA = 'Alta';
+    const SUBTAREA_PRIORIDAD_MEDIA = 'Media';
+    const SUBTAREA_PRIORIDAD_BAJA = 'Baja';
+
+    const SUBTAREA_PRIORIDADES = [
+        self::SUBTAREA_PRIORIDAD_ALTA,
+        self::SUBTAREA_PRIORIDAD_MEDIA,
+        self::SUBTAREA_PRIORIDAD_BAJA
     ];
 
     // ============================================================
@@ -120,6 +162,38 @@ class TaskConfig
     }
 
     /**
+     * Valida si un estado de subtarea es válido
+     */
+    public static function isValidSubtareaEstado(string $estado): bool
+    {
+        return in_array($estado, self::SUBTAREA_ESTADOS);
+    }
+
+    /**
+     * Valida si una prioridad de subtarea es válida
+     */
+    public static function isValidSubtareaPrioridad(string $prioridad): bool
+    {
+        return in_array($prioridad, self::SUBTAREA_PRIORIDADES);
+    }
+
+    /**
+     * Verifica si una subtarea puede ser completada según su estado
+     */
+    public static function canCompleteSubtarea(string $estado): bool
+    {
+        return in_array($estado, self::SUBTAREA_COMPLETABLE_ESTADOS);
+    }
+
+    /**
+     * Verifica si una subtarea puede ser reabierta según su estado
+     */
+    public static function canReopenSubtarea(string $estado): bool
+    {
+        return in_array($estado, self::SUBTAREA_REOPENABLE_ESTADOS);
+    }
+
+    /**
      * Valida si un archivo tiene tipo MIME permitido
      */
     public static function isAllowedMimeType(string $mimeType): bool
@@ -177,6 +251,26 @@ class TaskConfig
         }
         
         return 'tarea_' . $taskId . '_u' . $userId . '_' . time() . '_' . mt_rand(1000, 9999) . '.' . $extension;
+    }
+
+    /**
+     * Genera nombre único para archivo de evidencia de subtarea
+     * 
+     * @param int $subtareaId ID de la subtarea
+     * @param int $userId ID del usuario
+     * @param string $originalName Nombre original del archivo
+     * @return string Nombre único generado
+     */
+    public static function generateSubtareaEvidenceFileName(int $subtareaId, int $userId, string $originalName): string
+    {
+        $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        
+        // Si la extensión no está en las permitidas, usar jpg por defecto
+        if (!in_array($extension, self::ALLOWED_EXTENSIONS)) {
+            $extension = 'jpg';
+        }
+        
+        return 'subtarea_' . $subtareaId . '_u' . $userId . '_' . time() . '_' . mt_rand(1000, 9999) . '.' . $extension;
     }
 
     /**

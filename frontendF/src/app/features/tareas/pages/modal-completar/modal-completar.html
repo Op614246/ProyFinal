@@ -1,6 +1,6 @@
 <ion-header>
   <ion-toolbar>
-    <ion-title class="text-base font-semibold">Completar Tarea</ion-title>
+    <ion-title class="text-base font-semibold">{{ subtarea ? 'Completar Subtarea' : 'Completar Tarea' }}</ion-title>
     <ion-buttons slot="end">
       <ion-button (click)="cerrarModal()">
         <fa-icon [icon]="faXmark" class="text-gray-500 text-xl"></fa-icon>
@@ -12,8 +12,8 @@
 <ion-content class="ion-padding">
   <div class="px-2">
   
-  <!-- Información de la tarea -->
-  <div class="mb-4 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-400" *ngIf="tarea">
+  <!-- Información de la tarea (solo si no hay subtarea) -->
+  <div class="mb-4 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-400" *ngIf="tarea && !subtarea">
     <h3 class="font-medium text-blue-900 mb-1">{{ tarea.titulo }}</h3>
     <p class="text-sm text-blue-700">
       Estado actual: <span class="font-medium">{{ tarea.estado }}</span>
@@ -23,11 +23,15 @@
     </p>
   </div>
 
-  <!-- Info subtarea si existe -->
+  <!-- Info subtarea -->
   <div class="mb-4 p-3 bg-green-50 rounded-lg border-l-4 border-green-400" *ngIf="subtarea">
-    <h3 class="font-medium text-green-900 mb-1">Subtarea: {{ subtarea.titulo }}</h3>
+    <p class="text-xs text-green-600 mb-1" *ngIf="tarea">Tarea: {{ tarea.titulo }}</p>
+    <h3 class="font-medium text-green-900 mb-1">{{ subtarea.titulo }}</h3>
+    <p class="text-sm text-green-700" *ngIf="subtarea.descripcion">
+      {{ subtarea.descripcion }}
+    </p>
     <p class="text-sm text-green-700">
-      <span class="font-medium">{{ subtarea.descripcion }}</span>
+      Estado: <span class="font-medium">{{ subtarea.estado }}</span>
     </p>
   </div>
 

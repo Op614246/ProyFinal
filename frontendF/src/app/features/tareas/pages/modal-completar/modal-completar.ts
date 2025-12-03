@@ -1,7 +1,7 @@
 import { Component, Input, OnInit, ChangeDetectorRef } from '@angular/core';
 import { faCamera, faCheck, faImage, faXmark, faTrash, faExclamationTriangle } from '@fortawesome/pro-regular-svg-icons';
 import { ModalController, ToastController, ActionSheetController, AlertController } from '@ionic/angular';
-import { TareaAdmin, Tarea } from '../../service/tareas.service';
+import { TareaAdmin, Subtarea, TareasService } from '../../service/tareas.service';
 
 @Component({
   selector: 'app-modal-completar',
@@ -11,7 +11,7 @@ import { TareaAdmin, Tarea } from '../../service/tareas.service';
 })
 export class ModalCompletar implements OnInit {
   @Input() tarea!: TareaAdmin;
-  @Input() subtarea?: Tarea;
+  @Input() subtarea?: Subtarea;
 
   // Iconos
   faCamera = faCamera;
@@ -36,7 +36,8 @@ export class ModalCompletar implements OnInit {
     private toastController: ToastController,
     private actionSheetController: ActionSheetController,
     private alertController: AlertController,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private tareasService: TareasService
   ) {}
 
   ngOnInit() {}
@@ -163,24 +164,49 @@ export class ModalCompletar implements OnInit {
     return this.observaciones.trim().length > 0;
   }
 
-  // Confirmar completar tarea
+  // Confirmar completar tarea/subtarea
   async confirmarCompletar() {
     if (!this.puedeConfirmar) {
       this.mostrarToast('Por favor ingrese las observaciones', 'warning');
       return;
     }
 
-    const datosCompletado = {
-      completada: true,
-      observaciones: this.observaciones.trim(),
-      imagenes: this.imagenes,
-      imagen: this.imagenesArchivos.length > 0 ? this.imagenesArchivos[0] : null, // Primera imagen como File
-      fechaCompletado: new Date().toISOString(),
-      tareaId: this.tarea?.id,
-      subtareaId: this.subtarea?.id
-    };
+    // Si hay subtarea, completamos la subtarea con evidencias
+    if (this.subtarea) {
+      try {
+        const response = await this.tareasService.completarSubtareaConEvidencia(
+          this.subtarea.id,
+          this.observaciones.trim(),
+          this.imagenesArchivos
+        ).toPromise();
 
-    this.modalController.dismiss(datosCompletado, 'confirm');
+        if (response && response.tipo === 1) {
+          this.mostrarToast('Subtarea completada exitosamente', 'success');
+          this.modalController.dismiss({ 
+            success: true, 
+            subtareaId: this.subtarea.id,
+            data: response.data 
+          }, 'confirm');
+        } else {
+          this.mostrarToast(response?.mensajes?.[0] || 'Error al completar', 'danger');
+        }
+      } catch (error: any) {
+        console.error('Error al completar subtarea:', error);
+        this.mostrarToast(error?.error?.mensajes?.[0] || 'Error al completar subtarea', 'danger');
+      }
+    } else {
+      // Modo legacy: retornar datos sin llamar al servicio (para tareas completas)
+      const datosCompletado = {
+        completada: true,
+        observaciones: this.observaciones.trim(),
+        imagenes: this.imagenesArchivos,
+        fechaCompletado: new Date().toISOString(),
+        tareaId: this.tarea?.id,
+        subtareaId: null
+      };
+
+      this.modalController.dismiss(datosCompletado, 'confirm');
+    }
   }
 
   // Mostrar toast

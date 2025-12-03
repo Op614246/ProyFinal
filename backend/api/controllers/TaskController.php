@@ -48,20 +48,24 @@ class TaskController
 
             $isAdmin = TaskConfig::isAdmin($userData['role']);
 
+            // Obtener filtros comunes de query params
+            $filters = [
+                'fecha' => $this->app->request()->get('fecha'),
+                'fecha_inicio' => $this->app->request()->get('fecha_inicio'),
+                'fecha_fin' => $this->app->request()->get('fecha_fin'),
+                'status' => $this->app->request()->get('status'),
+                'priority' => $this->app->request()->get('priority'),
+                'categoria_id' => $this->app->request()->get('categoria_id'),
+                'sucursal_id' => $this->app->request()->get('sucursal_id')
+            ];
+
+            // Limpiar filtros vacíos
+            $filters = array_filter($filters, function ($v) {
+                return $v !== null && $v !== '';
+            });
+
             if ($isAdmin) {
-                // Admin: obtener filtros de query params
-                $filters = [
-                    'fecha_inicio' => $this->app->request()->get('fecha_inicio'),
-                    'fecha_fin' => $this->app->request()->get('fecha_fin'),
-                    'status' => $this->app->request()->get('status'),
-                    'priority' => $this->app->request()->get('priority')
-                ];
-
-                // Limpiar filtros vacíos
-                $filters = array_filter($filters, function ($v) {
-                    return $v !== null && $v !== '';
-                });
-
+                // Admin: puede ver todas las tareas con filtros
                 $tasks = $this->repository->getAllForAdmin($filters);
 
                 Logger::info('Admin consultó lista de tareas', [
@@ -71,9 +75,9 @@ class TaskController
                     'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
                 ]);
             } else {
-                // Usuario: obtener sus tareas ordenadas + tareas disponibles
-                $myTasks = $this->repository->getAllForUser($userData['id']);
-                $availableTasks = $this->repository->getAvailableTasks();
+                // Usuario: obtener solo SUS tareas con filtros + tareas disponibles
+                $myTasks = $this->repository->getAllForUser($userData['id'], $filters);
+                $availableTasks = $this->repository->getAvailableTasksFiltered($filters);
 
                 $tasks = [
                     'my_tasks' => $myTasks,
@@ -82,6 +86,7 @@ class TaskController
 
                 Logger::debug('Usuario consultó sus tareas', [
                     'user_id' => $userData['id'],
+                    'filters' => $filters,
                     'my_tasks_count' => count($myTasks),
                     'available_count' => count($availableTasks)
                 ]);
@@ -310,12 +315,15 @@ class TaskController
                 return $this->sendResponse($this->validator->taskNotFound());
             }
 
-            // Verificar que la tarea está asignada al usuario
-            if ((int)$task['assigned_user_id'] !== $userData['id']) {
+            // Verificar que la tarea está asignada al usuario (comparar como enteros)
+            $assignedUserId = (int)$task['assigned_user_id'];
+            $currentUserId = (int)$userData['id'];
+            
+            if ($assignedUserId !== $currentUserId) {
                 Logger::warning('Intento de completar tarea no asignada', [
                     'task_id' => $taskId,
-                    'user_id' => $userData['id'],
-                    'assigned_to' => $task['assigned_user_id'],
+                    'user_id' => $currentUserId,
+                    'assigned_to' => $assignedUserId,
                     'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
                 ]);
                 return $this->sendResponse($this->validator->notAssignedToYou());
@@ -331,12 +339,12 @@ class TaskController
                 return $this->sendResponse($this->validator->cannotComplete());
             }
 
-            // Validar imagen de evidencia (opcional ahora)
-            $hasImage = isset($_FILES['evidence']) && !empty($_FILES['evidence']['tmp_name']);
+            // Validar imágenes de evidencia (opcional, puede ser múltiples)
+            $hasImages = isset($_FILES['evidence']) && !empty($_FILES['evidence']['tmp_name']);
             $observaciones = isset($_POST['observaciones']) ? trim($_POST['observaciones']) : '';
 
             // Requerimos al menos observaciones
-            if (empty($observaciones) && !$hasImage) {
+            if (empty($observaciones) && !$hasImages) {
                 return $this->sendResponse([
                     'tipo' => 0,
                     'mensajes' => ['Debe proporcionar observaciones y/o imagen de evidencia.'],
@@ -344,61 +352,97 @@ class TaskController
                 ]);
             }
 
-            $evidencePath = null;
-
-            if ($hasImage) {
-                $file = $_FILES['evidence'];
-
-                // Validar tamaño máximo
-                $fileSizeKb = $file['size'] / 1024;
-
-                if ($fileSizeKb > TaskConfig::MAX_FILE_SIZE_KB) {
-                    return $this->sendResponse([
-                        'tipo' => 0,
-                        'mensajes' => ['La imagen no puede exceder ' . (TaskConfig::MAX_FILE_SIZE_KB / 1024) . ' MB.'],
-                        'data' => null
-                    ]);
-                }
-
-                if (!$this->validator->validateCompletionImage($file)) {
-                    return $this->sendResponse($this->validator->imageValidationError());
-                }
-
-                // Procesar y guardar imagen
-                $evidencePath = $this->saveEvidenceImage($file, $taskId, $userData['id']);
-
-                if (!$evidencePath) {
-                    return $this->sendResponse($this->validator->imageUploadError());
-                }
-
-                // Guardar en task_evidence también
-                $this->repository->addEvidence(
-                    $taskId,
-                    $userData['id'],
-                    $evidencePath,
-                    $file['name'],
-                    (int)$fileSizeKb,
-                    $file['type'],
-                    $observaciones
-                );
+            // Crear UNA sola evidencia con las observaciones
+            $evidenciaId = $this->repository->createEvidence($taskId, $userData['id'], $observaciones);
+            
+            if (!$evidenciaId) {
+                return $this->sendResponse([
+                    'tipo' => 0,
+                    'mensajes' => ['Error al crear la evidencia.'],
+                    'data' => null
+                ]);
             }
 
-            // Completar tarea con observaciones
-            $result = $this->repository->complete($taskId, $userData['id'], $observaciones, $evidencePath);
+            $evidencePaths = [];
+
+            if ($hasImages) {
+                $files = $_FILES['evidence'];
+                
+                // Normalizar estructura: puede ser un archivo o múltiples
+                $isMultiple = is_array($files['tmp_name']);
+                $fileCount = $isMultiple ? count($files['tmp_name']) : 1;
+                
+                for ($i = 0; $i < $fileCount; $i++) {
+                    // Extraer datos del archivo actual
+                    if ($isMultiple) {
+                        $file = [
+                            'name' => $files['name'][$i],
+                            'type' => $files['type'][$i],
+                            'tmp_name' => $files['tmp_name'][$i],
+                            'error' => $files['error'][$i],
+                            'size' => $files['size'][$i]
+                        ];
+                    } else {
+                        $file = $files;
+                    }
+                    
+                    // Saltar archivos vacíos
+                    if (empty($file['tmp_name'])) {
+                        continue;
+                    }
+
+                    // Validar tamaño máximo
+                    $fileSizeKb = $file['size'] / 1024;
+
+                    if ($fileSizeKb > TaskConfig::MAX_FILE_SIZE_KB) {
+                        return $this->sendResponse([
+                            'tipo' => 0,
+                            'mensajes' => ['La imagen ' . $file['name'] . ' excede ' . (TaskConfig::MAX_FILE_SIZE_KB / 1024) . ' MB.'],
+                            'data' => null
+                        ]);
+                    }
+
+                    if (!$this->validator->validateCompletionImage($file)) {
+                        return $this->sendResponse($this->validator->imageValidationError());
+                    }
+
+                    // Procesar y guardar imagen en disco
+                    $evidencePath = $this->saveEvidenceImage($file, $taskId, $userData['id']);
+
+                    if (!$evidencePath) {
+                        return $this->sendResponse($this->validator->imageUploadError());
+                    }
+
+                    $evidencePaths[] = $evidencePath;
+
+                    // Guardar imagen en evidencia_imagenes (apuntando a la única evidencia)
+                    $this->repository->addImageToEvidence(
+                        $evidenciaId,
+                        $evidencePath,
+                        $file['name'],
+                        (int)$fileSizeKb,
+                        $file['type']
+                    );
+                }
+            }
+
+            // Completar tarea con observaciones (sin pasar evidencia, ya se guardó arriba)
+            $result = $this->repository->complete($taskId, $userData['id'], $observaciones, null);
 
             if ($result) {
                 Logger::info('Tarea completada', [
                     'task_id' => $taskId,
                     'user_id' => $userData['id'],
                     'username' => $userData['username'],
-                    'evidence_path' => $evidencePath,
+                    'evidence_count' => count($evidencePaths),
                     'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
                 ]);
 
                 $response = $this->validator->completeSuccess();
                 $response['data'] = [
                     'completed_at' => date('Y-m-d H:i:s'),
-                    'evidence_image' => $evidencePath
+                    'evidence_images' => $evidencePaths,
+                    'evidence_count' => count($evidencePaths)
                 ];
                 return $this->sendResponse($response);
             }
@@ -467,7 +511,9 @@ class TaskController
 
     /**
      * PUT /:id/status
-     * Actualiza el estado de una tarea (solo Admin)
+     * Actualiza el estado de una tarea
+     * - Admin: puede cambiar cualquier estado
+     * - User: solo puede iniciar (in_process) sus propias tareas
      */
     public function updateStatus($taskId)
     {
@@ -478,18 +524,9 @@ class TaskController
                 return $this->sendResponse($this->validator->invalidSession());
             }
 
-            // Solo admin puede cambiar estado manualmente
-            if (!TaskConfig::isAdmin($userData['role'])) {
-                Logger::warning('Intento de cambiar estado sin permisos', [
-                    'user_id' => $userData['id'],
-                    'task_id' => $taskId,
-                    'role' => $userData['role'],
-                    'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-                ]);
-                return $this->sendResponse($this->validator->adminRequired());
-            }
-
             $taskId = (int)$taskId;
+            $isAdmin = TaskConfig::isAdmin($userData['role']);
+            $userId = (int)$userData['id'];
 
             // Verificar que la tarea existe
             $task = $this->repository->getById($taskId);
@@ -510,6 +547,33 @@ class TaskController
             // Validar estado
             if (!$this->validator->validateStatus($newStatus)) {
                 return $this->sendResponse($this->validator->invalidStatus());
+            }
+
+            // Verificar permisos
+            if (!$isAdmin) {
+                // Usuario normal: solo puede iniciar sus propias tareas
+                $assignedUserId = (int)$task['assigned_user_id'];
+                
+                if ($assignedUserId !== $userId) {
+                    Logger::warning('Intento de cambiar estado de tarea no asignada', [
+                        'user_id' => $userId,
+                        'task_id' => $taskId,
+                        'assigned_to' => $assignedUserId,
+                        'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+                    ]);
+                    return $this->sendResponse($this->validator->notAssignedToYou());
+                }
+                
+                // Solo permitir cambiar a 'in_process' (iniciar tarea)
+                if ($newStatus !== TaskConfig::STATUS_IN_PROCESS) {
+                    Logger::warning('Usuario intentó cambiar a estado no permitido', [
+                        'user_id' => $userId,
+                        'task_id' => $taskId,
+                        'requested_status' => $newStatus,
+                        'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+                    ]);
+                    return $this->sendResponse($this->validator->adminRequired());
+                }
             }
 
             // Actualizar estado
@@ -747,7 +811,9 @@ class TaskController
 
     /**
      * GET /available
-     * Obtiene tareas disponibles para auto-asignación (solo del día actual)
+     * Obtiene tareas disponibles para auto-asignación
+     * Si se pasa ?fecha=YYYY-MM-DD, filtra por esa fecha
+     * Si no, usa la fecha actual
      */
     public function getAvailable()
     {
@@ -758,11 +824,23 @@ class TaskController
                 return $this->sendResponse($this->validator->invalidSession());
             }
 
-            $tasks = $this->repository->getAvailableTasksForToday();
+            // Obtener filtros de query params
+            $filters = [
+                'fecha' => $this->app->request()->get('fecha') ?: date('Y-m-d'),
+                'categoria_id' => $this->app->request()->get('categoria_id'),
+                'sucursal_id' => $this->app->request()->get('sucursal_id')
+            ];
+
+            // Limpiar filtros vacíos (excepto fecha que tiene valor por defecto)
+            $filters = array_filter($filters, function ($v) {
+                return $v !== null && $v !== '';
+            });
+
+            $tasks = $this->repository->getAvailableTasksFiltered($filters);
 
             return $this->sendResponse([
                 'tipo' => 1,
-                'mensajes' => [count($tasks) . ' tareas disponibles para hoy.'],
+                'mensajes' => [count($tasks) . ' tareas disponibles.'],
                 'data' => $tasks
             ]);
 

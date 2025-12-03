@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { faFlag, faXmark } from '@fortawesome/pro-regular-svg-icons';
 import { ActionSheetController, AlertController, ModalController, ToastController, NavParams } from '@ionic/angular';
 import { ModalForm } from '../../modal-form/modal-form';
+import { ModalCompletar } from '../modal-completar/modal-completar';
 import { Tarea, TareaAdmin, TareasService } from '../../service/tareas.service';
 import { AuthService } from '../../../../core/services/auth.service';
 
@@ -307,6 +308,58 @@ export class SubtareaInfo implements OnInit {
         }
         break;
     }
+  }
+
+  /**
+   * Abrir modal para completar subtarea
+   */
+  async abrirModalCompletar() {
+    if (!this.tarea) return;
+
+    const modal = await this.modalController.create({
+      component: ModalCompletar,
+      componentProps: {
+        tarea: this.tareaadmin,
+        subtarea: this.tarea
+      },
+      breakpoints: [0, 0.75, 1],
+      initialBreakpoint: 0.75
+    });
+
+    modal.onDidDismiss().then((result) => {
+      if (result.role === 'confirm' && result.data?.success) {
+        // Actualizar el estado de la tarea localmente
+        if (this.tarea) {
+          this.tarea.estado = 'Completada';
+          this.tarea.completada = true;
+        }
+        this.mostrarToast('Subtarea completada exitosamente', 'success');
+        // Cerrar el modal de info y notificar actualización
+        this.cerrarModal({ actualizada: true }, 'confirm');
+      }
+    });
+
+    await modal.present();
+  }
+
+  /**
+   * Obtener URL completa de una evidencia
+   */
+  getEvidenciaUrl(archivo: string): string {
+    return this.tareasService.getEvidenciaUrl(archivo);
+  }
+
+  /**
+   * Ver evidencia en modal ampliado
+   */
+  async verEvidencia(evidencia: any) {
+    const alert = await this.alertController.create({
+      header: evidencia.nombre_original || 'Evidencia',
+      message: `<img src="${this.getEvidenciaUrl(evidencia.archivo)}" style="max-width: 100%; border-radius: 8px;">`,
+      buttons: ['Cerrar'],
+      cssClass: 'evidencia-modal'
+    });
+    await alert.present();
   }
 
   private async mostrarToast(mensaje: string, color: string) {

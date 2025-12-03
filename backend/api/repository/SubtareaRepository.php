@@ -36,8 +36,12 @@ class SubtareaRepository {
                 s.usuarioasignado_id,
                 CONCAT(u.nombre, ' ', u.apellido) as usuario_asignado,
                 u.username as usuario_username,
+                s.completed_at,
+                s.completed_by,
+                s.completion_notes,
                 s.created_at,
-                s.updated_at
+                s.updated_at,
+                (SELECT COUNT(*) FROM subtarea_evidencias WHERE subtarea_id = s.id) as evidencia_count
             FROM subtareas s
             LEFT JOIN categorias c ON s.categoria_id = c.id
             LEFT JOIN users u ON s.usuarioasignado_id = u.id
@@ -73,19 +77,34 @@ class SubtareaRepository {
                 s.horafin,
                 s.categoria_id,
                 c.nombre as categoria_nombre,
+                c.color as categoria_color,
                 s.usuarioasignado_id,
                 CONCAT(u.nombre, ' ', u.apellido) as usuario_asignado,
+                u.username as usuario_username,
+                s.completed_at,
+                s.completed_by,
+                CONCAT(uc.nombre, ' ', uc.apellido) as completed_by_nombre,
+                s.completion_notes,
                 s.created_at,
-                s.updated_at
+                s.updated_at,
+                (SELECT COUNT(*) FROM subtarea_evidencias WHERE subtarea_id = s.id) as evidencia_count
             FROM subtareas s
             LEFT JOIN categorias c ON s.categoria_id = c.id
             LEFT JOIN users u ON s.usuarioasignado_id = u.id
+            LEFT JOIN users uc ON s.completed_by = uc.id
             WHERE s.id = ?
         ";
         
         $stmt = $this->db->prepare($sql);
         $stmt->execute([$subtareaId]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+        $subtarea = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        // Incluir evidencias si existen
+        if ($subtarea && $subtarea['evidencia_count'] > 0) {
+            $subtarea['evidencias'] = $this->getEvidenciasBySubtarea($subtareaId);
+        }
+        
+        return $subtarea;
     }
     
     /**
@@ -192,18 +211,24 @@ class SubtareaRepository {
     
     /**
      * Completar subtarea
+     * @param int $subtareaId ID de la subtarea
+     * @param int|null $userId ID del usuario que completa
+     * @param string|null $observaciones Observaciones de completado
      */
-    public function completarSubtarea($subtareaId, $observaciones = null) {
+    public function completarSubtarea($subtareaId, $userId = null, $observaciones = null) {
         $sql = "
             UPDATE subtareas 
             SET estado = 'Completada', 
                 completada = 1, 
-                progreso = 100
+                progreso = 100,
+                completed_at = NOW(),
+                completed_by = ?,
+                completion_notes = ?
             WHERE id = ?
         ";
         
         $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute([$subtareaId]);
+        $result = $stmt->execute([$userId, $observaciones, $subtareaId]);
         
         // Obtener task_id para actualizar progreso
         $subtarea = $this->getSubtareaById($subtareaId);
@@ -336,4 +361,244 @@ class SubtareaRepository {
         $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    // ============================================================
+    // SECCIÓN: EVIDENCIAS DE SUBTAREAS
+    // ============================================================
+
+    /**
+     * Completar subtarea con evidencia (imagen)
+     * 
+     * @param int $subtareaId ID de la subtarea
+     * @param int $userId ID del usuario que completa
+     * @param string $archivoPath Ruta del archivo de evidencia
+     * @param string|null $observaciones Notas de completado
+     * @param array|null $fileInfo Información adicional del archivo
+     * @return bool
+     */
+    public function completarSubtareaConEvidencia(
+        int $subtareaId, 
+        int $userId, 
+        string $archivoPath, 
+        ?string $observaciones = null,
+        ?array $fileInfo = null
+    ): bool {
+        try {
+            $this->db->beginTransaction();
+
+            // 1. Actualizar subtarea como completada
+            $sqlSubtarea = "
+                UPDATE subtareas 
+                SET estado = 'Completada', 
+                    completada = 1, 
+                    progreso = 100,
+                    completed_at = NOW(),
+                    completed_by = ?,
+                    completion_notes = ?
+                WHERE id = ?
+            ";
+            $stmtSubtarea = $this->db->prepare($sqlSubtarea);
+            $stmtSubtarea->execute([$userId, $observaciones, $subtareaId]);
+
+            // 2. Insertar evidencia
+            $sqlEvidencia = "
+                INSERT INTO subtarea_evidencias 
+                (subtarea_id, archivo, tipo, nombre_original, tamanio, uploaded_by, observaciones, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+            ";
+            $stmtEvidencia = $this->db->prepare($sqlEvidencia);
+            $stmtEvidencia->execute([
+                $subtareaId,
+                $archivoPath,
+                $fileInfo['tipo'] ?? 'imagen',
+                $fileInfo['nombre_original'] ?? null,
+                $fileInfo['tamanio'] ?? null,
+                $userId,
+                $observaciones
+            ]);
+
+            // 3. Actualizar progreso de la tarea padre
+            $subtarea = $this->getSubtareaById($subtareaId);
+            if ($subtarea) {
+                $this->actualizarProgresoTarea($subtarea['task_id']);
+            }
+
+            $this->db->commit();
+            return true;
+
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Obtener evidencias de una subtarea
+     * 
+     * @param int $subtareaId ID de la subtarea
+     * @return array Lista de evidencias
+     */
+    public function getEvidenciasBySubtarea(int $subtareaId): array
+    {
+        $sql = "
+            SELECT 
+                e.id,
+                e.subtarea_id,
+                e.archivo,
+                e.tipo,
+                e.nombre_original,
+                e.tamanio,
+                e.uploaded_by,
+                CONCAT(u.nombre, ' ', u.apellido) as uploaded_by_nombre,
+                e.observaciones,
+                e.created_at
+            FROM subtarea_evidencias e
+            LEFT JOIN users u ON e.uploaded_by = u.id
+            WHERE e.subtarea_id = ?
+            ORDER BY e.created_at DESC
+        ";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$subtareaId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Agregar evidencia adicional a una subtarea
+     * 
+     * @param int $subtareaId ID de la subtarea
+     * @param int $userId ID del usuario que sube
+     * @param string $archivoPath Ruta del archivo
+     * @param array|null $fileInfo Información del archivo
+     * @param string|null $observaciones Notas
+     * @return int|false ID de la evidencia creada o false
+     */
+    public function agregarEvidencia(
+        int $subtareaId,
+        int $userId,
+        string $archivoPath,
+        ?array $fileInfo = null,
+        ?string $observaciones = null
+    ) {
+        $sql = "
+            INSERT INTO subtarea_evidencias 
+            (subtarea_id, archivo, tipo, nombre_original, tamanio, uploaded_by, observaciones, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+        ";
+
+        $stmt = $this->db->prepare($sql);
+        $result = $stmt->execute([
+            $subtareaId,
+            $archivoPath,
+            $fileInfo['tipo'] ?? 'imagen',
+            $fileInfo['nombre_original'] ?? null,
+            $fileInfo['tamanio'] ?? null,
+            $userId,
+            $observaciones
+        ]);
+
+        return $result ? (int)$this->db->lastInsertId() : false;
+    }
+
+    /**
+     * Eliminar evidencia
+     * 
+     * @param int $evidenciaId ID de la evidencia
+     * @return bool
+     */
+    public function eliminarEvidencia(int $evidenciaId): bool
+    {
+        // Primero obtener la ruta del archivo para poder eliminarlo del sistema de archivos
+        $sql = "SELECT archivo FROM subtarea_evidencias WHERE id = ?";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$evidenciaId]);
+        $evidencia = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$evidencia) {
+            return false;
+        }
+
+        // Eliminar de la BD
+        $sqlDelete = "DELETE FROM subtarea_evidencias WHERE id = ?";
+        $stmtDelete = $this->db->prepare($sqlDelete);
+        return $stmtDelete->execute([$evidenciaId]);
+    }
+
+    /**
+     * Obtener evidencia por ID
+     * 
+     * @param int $evidenciaId ID de la evidencia
+     * @return array|false
+     */
+    public function getEvidenciaById(int $evidenciaId)
+    {
+        $sql = "
+            SELECT 
+                e.*,
+                CONCAT(u.nombre, ' ', u.apellido) as uploaded_by_nombre
+            FROM subtarea_evidencias e
+            LEFT JOIN users u ON e.uploaded_by = u.id
+            WHERE e.id = ?
+        ";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$evidenciaId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Contar evidencias de una subtarea
+     * 
+     * @param int $subtareaId ID de la subtarea
+     * @return int
+     */
+    public function countEvidencias(int $subtareaId): int
+    {
+        $sql = "SELECT COUNT(*) FROM subtarea_evidencias WHERE subtarea_id = ?";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$subtareaId]);
+        return (int)$stmt->fetchColumn();
+    }
+
+    /**
+     * Verificar si la subtarea pertenece al usuario (para validar permisos)
+     * 
+     * @param int $subtareaId ID de la subtarea
+     * @param int $userId ID del usuario
+     * @return bool
+     */
+    public function isSubtareaAsignadaAUsuario(int $subtareaId, int $userId): bool
+    {
+        $sql = "SELECT 1 FROM subtareas WHERE id = ? AND usuarioasignado_id = ?";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$subtareaId, $userId]);
+        return $stmt->fetch() !== false;
+    }
+
+    /**
+     * Verificar si una subtarea puede ser completada
+     * 
+     * @param int $subtareaId ID de la subtarea
+     * @return array ['can_complete' => bool, 'reason' => string|null]
+     */
+    public function canCompleteSubtarea(int $subtareaId): array
+    {
+        $subtarea = $this->getSubtareaById($subtareaId);
+
+        if (!$subtarea) {
+            return ['can_complete' => false, 'reason' => 'Subtarea no encontrada'];
+        }
+
+        if ($subtarea['completada'] == 1) {
+            return ['can_complete' => false, 'reason' => 'La subtarea ya está completada'];
+        }
+
+        $estadosCompletables = ['Pendiente', 'En progreso'];
+        if (!in_array($subtarea['estado'], $estadosCompletables)) {
+            return ['can_complete' => false, 'reason' => 'El estado actual no permite completar'];
+        }
+
+        return ['can_complete' => true, 'reason' => null];
+    }
 }
+

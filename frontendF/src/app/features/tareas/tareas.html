@@ -365,8 +365,8 @@
                 <span class="text-xs">Ver</span>
               </ion-button>
 
-              <!-- Si está completada: Reaperturar -->
-              <ion-button *ngIf="tarea.estado === 'Completada'" 
+              <!-- Si está completada, inactiva o incompleta: Reaperturar -->
+              <ion-button *ngIf="tarea.estado === 'Completada' || tarea.estado === 'Inactiva' || tarea.estado === 'Incompleta'" 
                           fill="outline" 
                           color="warning" 
                           size="small" 
@@ -376,8 +376,8 @@
                 <span class="text-xs">Reabrir</span>
               </ion-button>
 
-              <!-- Si NO está completada: Completar -->
-              <ion-button *ngIf="tarea.estado !== 'Completada'" 
+              <!-- Si está pendiente o en proceso: Completar -->
+              <ion-button *ngIf="tarea.estado === 'Pendiente' || tarea.estado === 'En progreso'" 
                           fill="solid" 
                           color="success" 
                           size="small" 

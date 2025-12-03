@@ -4,17 +4,14 @@
  * 
  * Validador y generador de respuestas para el módulo de tareas.
  * Agrupa todas las validaciones y mensajes de respuesta.
+ * Usa TaskConfig para configuración centralizada.
  */
+
+require_once __DIR__ . '/../../api/core/TaskConfig.php';
 
 class TaskValidator
 {
     private $errors = [];
-
-    // Constantes de validación
-    const MAX_IMAGE_SIZE = 1572864; // 1.5 MB en bytes
-    const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png'];
-    const VALID_STATUSES = ['pending', 'in_process', 'completed', 'incomplete', 'inactive', 'closed'];
-    const VALID_PRIORITIES = ['high', 'medium', 'low'];
 
     // ============================================================
     // SECCIÓN: VALIDACIONES DE ENTRADA
@@ -48,11 +45,12 @@ class TaskValidator
             }
         }
 
-        // Prioridad requerida y válida
+        // Prioridad requerida y válida (usando TaskConfig)
         if (!isset($data['priority']) || empty($data['priority'])) {
             $this->errors[] = "La prioridad es requerida.";
-        } elseif (!in_array($data['priority'], self::VALID_PRIORITIES, true)) {
-            $this->errors[] = "La prioridad debe ser 'high', 'medium' o 'low'.";
+        } elseif (!TaskConfig::isValidPriority($data['priority'])) {
+            $validPriorities = implode(', ', TaskConfig::PRIORITIES);
+            $this->errors[] = "La prioridad debe ser: {$validPriorities}.";
         }
 
         // Deadline opcional pero formato válido
@@ -116,10 +114,10 @@ class TaskValidator
             return false;
         }
 
-        // Validar tamaño (máximo 1.5 MB)
+        // Validar tamaño (usando TaskConfig)
         $fileSize = filesize($file['tmp_name']);
-        if ($fileSize === false || $fileSize > self::MAX_IMAGE_SIZE) {
-            $sizeMB = number_format(self::MAX_IMAGE_SIZE / 1048576, 1);
+        if ($fileSize === false || !TaskConfig::isFileSizeValid($fileSize)) {
+            $sizeMB = number_format(TaskConfig::MAX_FILE_SIZE_BYTES / 1048576, 1);
             $this->errors[] = "La imagen no puede exceder {$sizeMB} MB.";
         }
 
@@ -128,8 +126,9 @@ class TaskValidator
         $mimeType = finfo_file($finfo, $file['tmp_name']);
         finfo_close($finfo);
 
-        if (!$mimeType || !in_array($mimeType, self::ALLOWED_MIME_TYPES, true)) {
-            $this->errors[] = "Solo se permiten imágenes JPEG o PNG.";
+        if (!$mimeType || !TaskConfig::isAllowedMimeType($mimeType)) {
+            $allowedTypes = implode(', ', TaskConfig::ALLOWED_EXTENSIONS);
+            $this->errors[] = "Solo se permiten imágenes: {$allowedTypes}.";
         }
 
         return empty($this->errors);
@@ -470,7 +469,7 @@ class TaskValidator
      */
     public function invalidStatus(): array
     {
-        $validStatuses = implode(', ', self::VALID_STATUSES);
+        $validStatuses = implode(', ', TaskConfig::STATUSES);
         return [
             'tipo' => 3,
             'mensajes' => ["Estado inválido. Los estados válidos son: {$validStatuses}."]
@@ -493,7 +492,7 @@ class TaskValidator
      */
     public function validateStatus(string $status): bool
     {
-        return in_array($status, self::VALID_STATUSES);
+        return TaskConfig::isValidStatus($status);
     }
 
     // ============================================================

@@ -19,6 +19,10 @@
 
 // Cargar configuración base (incluye autoload con PSR-4, dotenv y crea $app)
 require_once __DIR__ . '/../../config.php';
+require_once __DIR__ . '/../../core/TaskConfig.php';
+require_once __DIR__ . '/../../controllers/TaskController.php';
+require_once __DIR__ . '/../../repository/TaskRepository.php';
+require_once __DIR__ . '/../../repository/SubtareaRepository.php';
 
 // ============================================
 // CORS - Los headers se manejan en .htaccess

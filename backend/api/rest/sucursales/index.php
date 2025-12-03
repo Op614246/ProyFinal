@@ -13,6 +13,8 @@
  */
 
 require_once __DIR__ . '/../../config.php';
+require_once __DIR__ . '/../../controllers/SucursalController.php';
+require_once __DIR__ . '/../../repository/SucursalRepository.php';
 
 // CORS
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {

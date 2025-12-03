@@ -552,7 +552,7 @@ export class Tareas implements OnInit, OnDestroy {
 
     modal.onDidDismiss().then((result) => {
       if (result.role === 'confirm' && result.data) {
-        this.tareasService.finalizarTarea(tarea.id, result.data.observaciones, result.data.imagen)
+        this.tareasService.finalizarTarea(tarea.id, result.data.observaciones, result.data.imagenes)
           .pipe(takeUntil(this.destroy$))
           .subscribe({
             next: (response) => {
@@ -773,75 +773,40 @@ export class Tareas implements OnInit, OnDestroy {
 
   // Procesar reapertura de tarea
   procesarReapertura(tareaId: string, datos: any): void {
-    // Si se solicita reasignación y hay usuario seleccionado, usarlo.
-    const hoyIso = this.formatearFechaISO(new Date());
-    // Normalizar fecha de vencimiento: usar la fecha dada o reiniciar a hoy
-    let fechaVencimiento = datos?.fechaVencimientoNueva ? (String(datos.fechaVencimientoNueva).slice(0,10)) : hoyIso;
-    // Normalizar prioridad: convertir a formato capitalizado si viene en minúsculas
-    const prioridad = datos?.prioridadNueva ? (String(datos.prioridadNueva).charAt(0).toUpperCase() + String(datos.prioridadNueva).slice(1)) : undefined;
+    const motivo = datos?.motivo || 'Reapertura solicitada';
+    const observaciones = datos?.observaciones || '';
 
-    const actualizacionBase: any = {
-      estado: 'Pendiente',
-      motivoReapertura: datos.motivo,
-      observacionesReapertura: datos.observaciones,
-      fechaAsignacion: hoyIso,
-      fechaVencimiento: fechaVencimiento
-    };
-    if (prioridad) {
-      actualizacionBase.Prioridad = prioridad;
-      actualizacionBase.prioridad = prioridad;
-    }
-
-    const hacerActualizacion = (payload: any) => {
-      this.tareasService.actualizarTareaAdmin(tareaId, payload)
-        .pipe(takeUntil(this.destroy$))
-        .subscribe({
-          next: () => {
+    // Usar el endpoint correcto de reapertura
+    this.tareasService.reabrirTarea(tareaId, motivo, observaciones)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          if (response.tipo === 1) {
             this.toastService.success('Tarea reaperturada correctamente');
-            this.cargarTareas();
-          },
-          error: (err) => {
-            console.error('Error al reaperturar:', err);
-            this.toastService.error('Error al reaperturar tarea');
-          }
-        });
-    };
-
-    if (datos?.reasignarTarea) {
-        if (datos?.usuarioSeleccionado) {
-        // usuarioSeleccionado contiene el id del usuario (string/number)
-        const payload = { ...actualizacionBase, usuarioasignado_id: Number(datos.usuarioSeleccionado) };
-        hacerActualizacion(payload);
-        return;
-      }
-
-      if (datos?.cargoSeleccionado) {
-        // buscar un usuario disponible con ese cargo y asignar
-        this.tareasService.getAvailableUsers().pipe(takeUntil(this.destroy$)).subscribe({
-          next: (resp) => {
-            if (resp?.tipo === 1 && Array.isArray(resp.data)) {
-              const usuarios = resp.data as any[];
-              const candidato = usuarios.find(u => u.departamento === datos.cargoSeleccionado) || usuarios[0];
-              if (candidato) {
-                const payload = { ...actualizacionBase, usuarioasignado_id: candidato.id };
-                hacerActualizacion(payload);
-                return;
-              }
+            
+            // Si hay reasignación, hacerla después de reabrir
+            if (datos?.reasignarTarea && datos?.usuarioSeleccionado) {
+              this.tareasService.assignTask(parseInt(tareaId), Number(datos.usuarioSeleccionado))
+                .pipe(takeUntil(this.destroy$))
+                .subscribe({
+                  next: () => this.cargarTareas(),
+                  error: (err) => {
+                    console.error('Error al reasignar:', err);
+                    this.cargarTareas();
+                  }
+                });
+            } else {
+              this.cargarTareas();
             }
-            // si no hay usuarios, hacer la actualización básica sin asignación
-            hacerActualizacion(actualizacionBase);
-          },
-          error: (err) => {
-            console.error('Error obteniendo usuarios para reasignar:', err);
-            hacerActualizacion(actualizacionBase);
+          } else {
+            this.toastService.error(response.mensajes?.[0] || 'Error al reaperturar');
           }
-        });
-        return;
-      }
-    }
-
-    // Sin reasignación: sólo reaperturar
-    hacerActualizacion(actualizacionBase);
+        },
+        error: (err) => {
+          console.error('Error al reaperturar:', err);
+          this.toastService.error('Error al reaperturar tarea');
+        }
+      });
   }
 
   // Abrir modal para completar tarea

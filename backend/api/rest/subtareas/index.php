@@ -73,6 +73,30 @@ $app->put('/:id/completar', function($id) use ($controller) {
     $controller->completarSubtarea($id);
 });
 
+// Completar subtarea con evidencia (form-data)
+$app->post('/:id/completar-con-evidencia', function($id) use ($controller) {
+    $controller->completarSubtareaConEvidencia($id);
+});
+
+// ===============================
+// RUTAS DE EVIDENCIAS
+// ===============================
+
+// Obtener evidencias de una subtarea
+$app->get('/:id/evidencias', function($id) use ($controller) {
+    $controller->getEvidencias($id);
+});
+
+// Agregar evidencia a una subtarea
+$app->post('/:id/evidencias', function($id) use ($controller) {
+    $controller->agregarEvidencia($id);
+});
+
+// Eliminar evidencia
+$app->delete('/:id/evidencias/:evidenciaId', function($id, $evidenciaId) use ($controller) {
+    $controller->eliminarEvidencia($id, $evidenciaId);
+});
+
 // Iniciar subtarea
 $app->put('/:id/iniciar', function($id) use ($controller) {
     $controller->iniciarSubtarea($id);
