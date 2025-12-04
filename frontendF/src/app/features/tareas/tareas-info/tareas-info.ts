@@ -3,7 +3,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ActivatedRoute, Router } from '@angular/router';
-import { faFlag, faSliders, faPlus } from '@fortawesome/pro-regular-svg-icons';
+import { faFlag, faSliders, faPlus, faPencil, faTrash } from '@fortawesome/pro-regular-svg-icons';
 import { ModalController, ToastController, AlertController } from '@ionic/angular';
 import { environment } from '../../../../environments/environment';
 import { ModalForm } from '../modal-form/modal-form';
@@ -11,7 +11,9 @@ import { ModalCompletar } from '../pages/modal-completar/modal-completar';
 import { ModalFiltros } from '../pages/modal-filtros/modal-filtros';
 import { ModalFiltrosAdmin } from '../pages/modal-filtros-admin/modal-filtros-admin';
 import { ModalCrearSubtarea } from '../pages/modal-crear-subtarea/modal-crear-subtarea';
+import { ModalReaperturar } from '../pages/modal-reaperturar/modal-reaperturar';
 import { SubtareaInfo } from '../pages/subtarea-info/subtarea-info';
+import { Creartarea } from '../creartarea/creartarea';
 import { Tarea, TareaAdmin, TareasService } from '../service/tareas.service';
 import { AuthService } from '../../../core/services/auth.service';
 
@@ -36,6 +38,8 @@ export class TareasInfo implements OnInit {
   public faSliders = faSliders;
   public faFlag = faFlag;
   public faPlus = faPlus;
+  public faPencil = faPencil;
+  public faTrash = faTrash;
 
   // Getter para acceder a apartadoadmin del servicio
   get isApartadoAdmin(): boolean {
@@ -55,9 +59,11 @@ export class TareasInfo implements OnInit {
     } catch (e) {
       // noop
     }
-    // Normalizar si viene con múltiples separadores
-    // El backend guarda rutas relativas como 'uploads/evidencias/imagen.jpg'
-    return `${environment.apiUrl}/${path}`;
+    // La ruta guardada es 'uploads/evidencias/archivo.jpg'
+    // La URL base de la API es 'http://localhost/ProyFinal/backend/api/rest'
+    // Necesitamos: 'http://localhost/ProyFinal/backend/uploads/evidencias/archivo.jpg'
+    const baseUrl = environment.apiUrl.replace('/api/rest', '');
+    return `${baseUrl}/${path}`;
   }
 
   // Parsear la propiedad imagenes que puede ser string JSON, lista separada o una sola ruta
@@ -169,19 +175,36 @@ export class TareasInfo implements OnInit {
   obtenerParametrosTarea() {
     this.route.queryParams.subscribe(params => {
       if (params['tareaId']) {
+        const tareaId = params['tareaId'];
+        
         // Primero intentar obtener del servicio (tarea recién seleccionada)
-        let tarea = this.tareasService.obtenerTareaAdminSeleccionada();
+        let tareaLocal = this.tareasService.obtenerTareaAdminSeleccionada();
         
         // Si no está en el servicio, buscar en el cache por ID
-        if (!tarea || tarea.id !== params['tareaId']) {
-          tarea = this.tareasService.obtenerTareaAdminPorIdLocal(params['tareaId']);
+        if (!tareaLocal || tareaLocal.id !== tareaId) {
+          tareaLocal = this.tareasService.obtenerTareaAdminPorIdLocal(tareaId);
         }
         
-        if (tarea) {
-          this.tareaAdminSeleccionada = tarea;
-          // Cargar subtareas del backend
-          this.cargarSubtareas();
+        // Usar datos locales inicialmente para carga rápida
+        if (tareaLocal) {
+          this.tareaAdminSeleccionada = tareaLocal;
         }
+        
+        // Siempre recargar desde el servidor para datos actualizados (observaciones, imágenes)
+        this.tareasService.obtenerTareaAdminPorId(tareaId).subscribe({
+          next: (response: any) => {
+            if (response?.tipo === 1 && response.data) {
+              this.tareaAdminSeleccionada = response.data;
+              try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+            }
+          },
+          error: (err: any) => {
+            console.error('Error cargando tarea:', err);
+          }
+        });
+        
+        // Cargar subtareas del backend
+        this.cargarSubtareas();
       }
     });
   }
@@ -251,6 +274,14 @@ export class TareasInfo implements OnInit {
     });
 
     modal.onDidDismiss().then((result) => {
+      console.log('SubtareaInfo dismissed:', result);
+      
+      // Si viene de un clic en editar
+      if (result.role === 'edit' && result.data?.editarSubtarea) {
+        this.editarSubtareaModal(result.data.subtarea);
+        return;
+      }
+      
       if (result.role === 'confirm' || result.data?.actualizada) {
         // Recargar subtareas si hubo cambios
         this.cargarSubtareas();
@@ -258,6 +289,39 @@ export class TareasInfo implements OnInit {
     });
 
     await modal.present();
+  }
+
+  async editarSubtareaModal(subtarea: Tarea) {
+    if (!this.tareaAdminSeleccionada) {
+      this.mostrarToast('No hay tarea seleccionada', 'danger');
+      return;
+    }
+
+    const modal = await this.modalController.create({
+      component: ModalCrearSubtarea,
+      breakpoints: [0, 0.75, 0.9, 1],
+      initialBreakpoint: 0.9,
+      componentProps: {
+        taskId: this.tareaAdminSeleccionada.id,
+        taskTitulo: this.tareaAdminSeleccionada.titulo,
+        edit: true,
+        subtareaId: subtarea.id,
+        titulo: subtarea.titulo,
+        descripcion: subtarea.descripcion,
+        estado: subtarea.estado,
+        prioridad: subtarea.Prioridad
+      }
+    });
+
+    await modal.present();
+
+    const { data, role } = await modal.onWillDismiss();
+    
+    if (role === 'confirm' && data?.created) {
+      // Recargar subtareas
+      this.cargarSubtareas();
+      this.mostrarToast('Subtarea actualizada correctamente', 'success');
+    }
   }
 
   navegarACrearTarea() {
@@ -331,13 +395,11 @@ export class TareasInfo implements OnInit {
     }
 
     const modal = await this.modalController.create({
-      component: ModalForm,
-      initialBreakpoint: 1,
-      breakpoints: [0, 1],
-      cssClass: 'modalamedias',
+      component: ModalReaperturar,
+      initialBreakpoint: 0.85,
+      breakpoints: [0, 0.85, 1],
       componentProps: {
-        tarea: this.tareaAdminSeleccionada,
-        accion: 'reaperturar'
+        tarea: this.tareaAdminSeleccionada
       }
     });
 
@@ -346,10 +408,30 @@ export class TareasInfo implements OnInit {
     const { data } = await modal.onWillDismiss();
     
     if (data && data.reaperturada) {
-      if (this.tareaAdminSeleccionada) {
-        this.tareaAdminSeleccionada.estado = 'Pendiente';
-        this.mostrarToast('Tarea reaperturada correctamente', 'success');
-      }
+      // Llamar al servicio para reabrir la tarea
+      this.tareasService.reabrirTarea(
+        this.tareaAdminSeleccionada.id,
+        data.motivo,
+        data.observaciones,
+        data.reasignarTarea ? data.usuarioSeleccionado : undefined,
+        data.fechaVencimientoNueva,
+        data.prioridadNueva
+      ).subscribe({
+        next: (response: any) => {
+          if (response?.tipo === 1) {
+            this.tareaAdminSeleccionada!.estado = 'Pendiente';
+            this.tareasService.notificarActualizacion();
+            this.mostrarToast('Tarea reaperturada correctamente', 'success');
+            this.cargarSubtareas();
+          } else {
+            this.mostrarToast(response?.mensajes?.[0] || 'Error al reabrir tarea', 'danger');
+          }
+        },
+        error: (err: any) => {
+          console.error('Error reabriendo tarea:', err);
+          this.mostrarToast('Error al reabrir tarea', 'danger');
+        }
+      });
     }
   }
 
@@ -368,6 +450,46 @@ export class TareasInfo implements OnInit {
     });
   }
 
+  // Editar tarea (solo admin)
+  editarTarea() {
+    if (!this.tareaAdminSeleccionada) {
+      this.mostrarToast('No hay tarea seleccionada', 'danger');
+      return;
+    }
+
+    this.abrirModalEditarTarea();
+  }
+
+  private async abrirModalEditarTarea() {
+    if (!this.tareaAdminSeleccionada) return;
+
+    const modal = await this.modalController.create({
+      component: Creartarea,
+      breakpoints: [0, 0.5, 0.75, 1],
+      initialBreakpoint: 1,
+      componentProps: {
+        edit: true,
+        tareaId: this.tareaAdminSeleccionada.id,
+        titulo: this.tareaAdminSeleccionada.titulo,
+        descripcion: this.tareaAdminSeleccionada.descripcion,
+        categoria: this.tareaAdminSeleccionada.Categoria,
+        prioridad: this.tareaAdminSeleccionada.Prioridad,
+        horainicio: this.tareaAdminSeleccionada.horainicio,
+        horafin: this.tareaAdminSeleccionada.horafin,
+        sucursal: this.tareaAdminSeleccionada.sucursal
+      }
+    });
+
+    await modal.present();
+
+    const { data, role } = await modal.onWillDismiss();
+    
+    if (role === 'confirm' && data?.updated) {
+      this.mostrarToast('Tarea actualizada correctamente', 'success');
+      this.cargarTareaAdmin();
+    }
+  }
+
   // Eliminar tarea (solo admin)
   async eliminarTarea() {
     if (!this.tareaAdminSeleccionada) {
@@ -375,9 +497,33 @@ export class TareasInfo implements OnInit {
       return;
     }
 
-    // Confirmar eliminación
-    const confirmado = confirm('¿Estás seguro de que deseas eliminar esta tarea?');
-    if (!confirmado) return;
+    // Crear modal de confirmación
+    const alert = await this.alertController.create({
+      header: 'Eliminar Tarea',
+      message: `¿Estás seguro de que deseas eliminar la tarea "${this.tareaAdminSeleccionada.titulo}"? Esta acción no se puede deshacer.`,
+      buttons: [
+        {
+          text: 'Cancelar',
+          role: 'cancel',
+          handler: () => {
+            // No hacer nada
+          }
+        },
+        {
+          text: 'Eliminar',
+          role: 'destructive',
+          handler: () => {
+            this.confirmarEliminacion();
+          }
+        }
+      ]
+    });
+
+    await alert.present();
+  }
+
+  private confirmarEliminacion() {
+    if (!this.tareaAdminSeleccionada) return;
 
     this.tareasService.eliminarTareaAdmin(this.tareaAdminSeleccionada.id).subscribe({
       next: (response) => {
@@ -421,6 +567,26 @@ export class TareasInfo implements OnInit {
       this.cargarSubtareas();
       this.mostrarToast('Subtarea creada correctamente', 'success');
     }
+  }
+
+  private cargarTareaAdmin() {
+    if (!this.tareaAdminSeleccionada) return;
+
+    const tareaId = this.tareaAdminSeleccionada.id;
+    
+    // Recargar la tarea actualizada desde el servidor
+    this.tareasService.obtenerTareaAdminPorId(tareaId).subscribe({
+      next: (response: any) => {
+        if (response?.tipo === 1 && response.data) {
+          this.tareaAdminSeleccionada = response.data;
+          this.cargarSubtareas();
+          try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+        }
+      },
+      error: (err: any) => {
+        console.error('Error cargando tarea actualizada:', err);
+      }
+    });
   }
 
   // Cargar subtareas desde el backend
@@ -590,12 +756,15 @@ export class TareasInfo implements OnInit {
     modal.onDidDismiss().then((result) => {
       if (result.role === 'confirm' && result.data) {
         const datos = result.data;
-        this.tareasService.finalizarTarea(this.tareaAdminSeleccionada!.id, datos.observaciones || '', datos.imagen)
+        // Enviar múltiples imágenes si existen
+        const imagenes = datos.imagenesArchivos?.length > 0 ? datos.imagenesArchivos : undefined;
+        this.tareasService.finalizarTarea(this.tareaAdminSeleccionada!.id, datos.observaciones || '', imagenes)
           .subscribe({
-            next: (response) => {
+            next: (response: any) => {
               if (response.tipo === 1) {
                 this.tareaAdminSeleccionada!.estado = 'Completada';
                 this.tareaAdminSeleccionada!.completada = true;
+                this.tareaAdminSeleccionada!.observaciones = datos.observaciones;
                 this.tareaAdminSeleccionada!.imagenes = datos.imagenes || this.tareaAdminSeleccionada!.imagenes;
                 this.tareaAdminSeleccionada!.fechaCompletado = datos.fechaCompletado || new Date().toISOString();
                 this.mostrarToast('Tarea finalizada exitosamente', 'success');
@@ -605,7 +774,7 @@ export class TareasInfo implements OnInit {
                 this.mostrarToast(response.mensajes?.[0] || 'Error al finalizar tarea', 'danger');
               }
             },
-            error: (err) => {
+            error: (err: any) => {
               console.error('Error al finalizar tarea:', err);
               this.mostrarToast('Error al finalizar la tarea', 'danger');
             }

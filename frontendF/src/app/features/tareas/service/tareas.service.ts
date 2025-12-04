@@ -519,14 +519,18 @@ export class TareasService {
   }
 
   /**
-   * Finalizar tarea con evidencia
+   * Finalizar tarea con evidencia (soporta múltiples imágenes)
    */
-  finalizarTarea(tareaId: string, observaciones: string, imagen?: File): Observable<ApiResponse<any>> {
+  finalizarTarea(tareaId: string, observaciones: string, imagenes?: File | File[]): Observable<ApiResponse<any>> {
     const formData = new FormData();
     formData.append('observaciones', observaciones);
     
-    if (imagen) {
-      formData.append('evidence', imagen);
+    if (imagenes) {
+      const files = Array.isArray(imagenes) ? imagenes : [imagenes];
+      files.forEach((file, index) => {
+        // Usar 'evidences[]' para múltiples archivos
+        formData.append('evidences[]', file, file.name);
+      });
     }
     
     return this.http.post<ApiResponse<any>>(`${this.adminUrl}/${tareaId}/completar`, formData);
@@ -535,8 +539,18 @@ export class TareasService {
   /**
    * Reabrir tarea (Admin)
    */
-  reabrirTarea(tareaId: string, motivo: string, observaciones?: string): Observable<ApiResponse<any>> {
-    const data = { motivo, observaciones };
+  reabrirTarea(
+    tareaId: string, 
+    motivo: string, 
+    observaciones?: string,
+    assignedUserId?: number,
+    deadline?: string,
+    priority?: string
+  ): Observable<ApiResponse<any>> {
+    const data: any = { motivo, observaciones };
+    if (assignedUserId) data.assigned_user_id = assignedUserId;
+    if (deadline) data.deadline = deadline;
+    if (priority) data.priority = priority;
     return this.http.put<ApiResponse<any>>(`${this.adminUrl}/${tareaId}/reabrir`, data);
   }
   
@@ -694,39 +708,60 @@ export class TareasService {
   /**
    * Completar subtarea de una tarea admin
    */
-  completarSubtareaAdmin(tareaAdminId: string, subtareaId: string): void {
-    const tareas = this.tareasAdminSubject.value;
-    const tareaIndex = tareas.findIndex(t => t.id === tareaAdminId);
-    
-    if (tareaIndex !== -1 && tareas[tareaIndex].Tarea) {
-      const subtareaIndex = tareas[tareaIndex].Tarea.findIndex(s => s.id === subtareaId);
-      if (subtareaIndex !== -1) {
-        tareas[tareaIndex].Tarea[subtareaIndex].completada = true;
-        tareas[tareaIndex].Tarea[subtareaIndex].estado = 'Completada';
-        tareas[tareaIndex].Tarea[subtareaIndex].progreso = 100;
-        this.tareasAdminSubject.next([...tareas]);
-        this.subtareasActualizadasSubject.next();
-      }
-    }
+  completarSubtareaAdmin(tareaAdminId: string, subtareaId: string): Observable<ApiResponse<any>> {
+    // Usar la ruta directa de subtareas para completar
+    return this.http.put<ApiResponse<any>>(
+      `${environment.apiUrl}/subtareas/${subtareaId}/completar`,
+      {}
+    ).pipe(
+      tap((response: any) => {
+        if (response?.tipo === 1) {
+          // Actualizar estado local
+          const tareas = this.tareasAdminSubject.value;
+          const tareaIndex = tareas.findIndex(t => t.id === tareaAdminId);
+          
+          if (tareaIndex !== -1 && tareas[tareaIndex].Tarea) {
+            const subtareaIndex = tareas[tareaIndex].Tarea.findIndex(s => s.id === subtareaId);
+            if (subtareaIndex !== -1) {
+              tareas[tareaIndex].Tarea[subtareaIndex].completada = true;
+              tareas[tareaIndex].Tarea[subtareaIndex].estado = 'Completada';
+              tareas[tareaIndex].Tarea[subtareaIndex].progreso = 100;
+              this.tareasAdminSubject.next([...tareas]);
+              this.subtareasActualizadasSubject.next();
+            }
+          }
+        }
+      })
+    );
   }
   
   /**
    * Descompletar subtarea de una tarea admin
    */
-  descompletarSubtareaAdmin(tareaAdminId: string, subtareaId: string): void {
-    const tareas = this.tareasAdminSubject.value;
-    const tareaIndex = tareas.findIndex(t => t.id === tareaAdminId);
-    
-    if (tareaIndex !== -1 && tareas[tareaIndex].Tarea) {
-      const subtareaIndex = tareas[tareaIndex].Tarea.findIndex(s => s.id === subtareaId);
-      if (subtareaIndex !== -1) {
-        tareas[tareaIndex].Tarea[subtareaIndex].completada = false;
-        tareas[tareaIndex].Tarea[subtareaIndex].estado = 'Pendiente';
-        tareas[tareaIndex].Tarea[subtareaIndex].progreso = 0;
-        this.tareasAdminSubject.next([...tareas]);
-        this.subtareasActualizadasSubject.next();
-      }
-    }
+  descompletarSubtareaAdmin(tareaAdminId: string, subtareaId: string): Observable<ApiResponse<any>> {
+    return this.http.put<ApiResponse<any>>(
+      `${this.adminUrl}/${tareaAdminId}/subtareas/${subtareaId}/descompletar`, 
+      {}
+    ).pipe(
+      tap((response: any) => {
+        if (response?.tipo === 1) {
+          // Actualizar estado local
+          const tareas = this.tareasAdminSubject.value;
+          const tareaIndex = tareas.findIndex(t => t.id === tareaAdminId);
+          
+          if (tareaIndex !== -1 && tareas[tareaIndex].Tarea) {
+            const subtareaIndex = tareas[tareaIndex].Tarea.findIndex(s => s.id === subtareaId);
+            if (subtareaIndex !== -1) {
+              tareas[tareaIndex].Tarea[subtareaIndex].completada = false;
+              tareas[tareaIndex].Tarea[subtareaIndex].estado = 'Pendiente';
+              tareas[tareaIndex].Tarea[subtareaIndex].progreso = 0;
+              this.tareasAdminSubject.next([...tareas]);
+              this.subtareasActualizadasSubject.next();
+            }
+          }
+        }
+      })
+    );
   }
   
   /**

@@ -2,10 +2,12 @@
 /**
  * TaskController.php
  * 
- * Controlador de tareas con:
+ * Controlador UNIFICADO de tareas con:
+ * - Soporte para Admin y User
  * - Encriptación AES-256 de datos en tránsito
  * - Validación de archivos para completar tareas
  * - Ordenamiento inteligente para usuarios
+ * - Métodos legacy para compatibilidad con frontend admin
  * - Logging con Monolog
  */
 
@@ -19,10 +21,8 @@ class TaskController
     private $validator;
     private $encryptionKey;
 
-    // Constantes
-    const DEFAULT_STATUS = 'pending';
+    // Constantes movidas a config.php - Solo mantener las que son específicas del controller
     const DEFAULT_DEADLINE_DAYS = 2;
-    const UPLOAD_DIR = '/uploads/tasks/';
 
     public function __construct($app)
     {
@@ -33,7 +33,444 @@ class TaskController
     }
 
     // ============================================================
-    // SECCIÓN: MÉTODOS PÚBLICOS (ENDPOINTS)
+    // SECCIÓN: HELPERS DE RESPUESTA Y UTILIDADES
+    // ============================================================
+
+    /**
+     * Respuesta de éxito en formato legacy
+     */
+    private function success($data, string $mensaje = 'Operación exitosa', int $code = 200)
+    {
+        return $this->sendLegacyResponse([
+            'tipo' => 1,
+            'mensajes' => [$mensaje],
+            'data' => $data
+        ], $code);
+    }
+
+    /**
+     * Respuesta de error de validación
+     */
+    private function validationError(string $mensaje, int $code = 400)
+    {
+        return $this->sendLegacyResponse([
+            'tipo' => 2,
+            'mensajes' => [$mensaje],
+            'data' => null
+        ], $code);
+    }
+
+    /**
+     * Respuesta de error del servidor
+     */
+    private function serverError(string $mensaje = 'Error interno del servidor')
+    {
+        return $this->sendLegacyResponse([
+            'tipo' => 3,
+            'mensajes' => [$mensaje],
+            'data' => null
+        ], 500);
+    }
+
+    /**
+     * Procesar y validar archivos subidos
+     * @return array ['files' => [...], 'error' => null] o ['files' => [], 'error' => 'mensaje']
+     */
+    private function processUploadedFiles(): array
+    {
+        $filesToProcess = [];
+        
+        // Crear directorio si no existe
+        if (!is_dir(UPLOAD_DIR)) {
+            mkdir(UPLOAD_DIR, 0755, true);
+        }
+        
+        // Caso 1: Campo único 'evidence'
+        if (isset($_FILES['evidence']) && $_FILES['evidence']['error'] === UPLOAD_ERR_OK) {
+            $filesToProcess[] = $_FILES['evidence'];
+        }
+        
+        // Caso 2: Campo múltiple 'evidences[]'
+        if (isset($_FILES['evidences']) && is_array($_FILES['evidences']['name'])) {
+            $count = count($_FILES['evidences']['name']);
+            for ($i = 0; $i < $count; $i++) {
+                if ($_FILES['evidences']['error'][$i] === UPLOAD_ERR_OK) {
+                    $filesToProcess[] = [
+                        'name' => $_FILES['evidences']['name'][$i],
+                        'type' => $_FILES['evidences']['type'][$i],
+                        'tmp_name' => $_FILES['evidences']['tmp_name'][$i],
+                        'error' => $_FILES['evidences']['error'][$i],
+                        'size' => $_FILES['evidences']['size'][$i]
+                    ];
+                }
+            }
+        }
+        
+        $savedFiles = [];
+        
+        foreach ($filesToProcess as $file) {
+            // Validar tamaño
+            if ($file['size'] > MAX_FILE_SIZE_BYTES) {
+                return ['files' => [], 'error' => "El archivo '{$file['name']}' excede el tamaño máximo de 1.5MB"];
+            }
+            
+            // Validar tipo
+            if (!in_array($file['type'], ALLOWED_IMAGE_TYPES)) {
+                return ['files' => [], 'error' => 'Solo se permiten imágenes (JPEG, PNG, WebP)'];
+            }
+            
+            $savedFiles[] = $file;
+        }
+        
+        return ['files' => $savedFiles, 'error' => null];
+    }
+
+    /**
+     * Guardar archivo en disco y retornar información
+     */
+    private function saveFileToDisk(array $file, int $taskId, int $userId): ?array
+    {
+        $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+        $uniqueId = uniqid();
+        $fileName = "tarea_{$taskId}_u{$userId}_{$uniqueId}.{$extension}";
+        $filePath = UPLOAD_PATH_RELATIVE . $fileName;
+        $fullPath = UPLOAD_DIR . $fileName;
+        
+        if (!move_uploaded_file($file['tmp_name'], $fullPath)) {
+            return null;
+        }
+        
+        return [
+            'path' => $filePath,
+            'name' => $file['name'],
+            'size' => $file['size'],
+            'type' => $file['type']
+        ];
+    }
+
+    // ============================================================
+    // SECCIÓN: MÉTODOS ADMIN (Formato Legacy)
+    // ============================================================
+
+    /**
+     * GET /admin/tareas
+     * Obtener todas las tareas admin con filtros opcionales
+     * Query params: fecha, status, sucursal_id, categoria_id, assigned_user_id, sin_asignar
+     */
+    public function getAllTareasAdmin()
+    {
+        try {
+            $request = $this->app->request();
+            
+            // Construir filtros desde query params
+            $filtros = array_filter([
+                'fecha' => $request->get('fecha'),
+                'status' => $request->get('status'),
+                'sucursal_id' => $request->get('sucursal_id'),
+                'categoria_id' => $request->get('categoria_id'),
+                'assigned_user_id' => $request->get('assigned_user_id'),
+                'sin_asignar' => $request->get('sin_asignar') === 'true' ? true : null
+            ], function($v) { return $v !== null; });
+            
+            // Obtener tareas con filtros (auto-inactiva vencidas)
+            $tareas = $this->repository->getTareasConFiltros($filtros);
+            
+            return $this->success([
+                "tareas" => $tareas,
+                "total" => count($tareas),
+                "filtros" => $filtros
+            ], 'Tareas obtenidas correctamente');
+        } catch (Exception $e) {
+            Logger::error('Error al obtener tareas admin', ['error' => $e->getMessage()]);
+            return $this->serverError('Error al obtener tareas');
+        }
+    }
+
+    /**
+     * GET /admin/tareas/:id
+     * Obtener tarea específica (formato legacy)
+     */
+    public function getTareaAdminById($taskId)
+    {
+        try {
+            $tarea = $this->repository->getTareaById((int)$taskId);
+            
+            if (!$tarea) {
+                return $this->validationError('Tarea no encontrada', 404);
+            }
+            
+            return $this->success($tarea, 'Tarea obtenida correctamente');
+        } catch (Exception $e) {
+            Logger::error('Error al obtener tarea', ['error' => $e->getMessage()]);
+            return $this->serverError('Error al obtener tarea');
+        }
+    }
+
+    /**
+     * GET /admin/tareas/fecha/:fecha
+     * Obtener tareas por fecha (formato legacy)
+     */
+    public function getTareasAdminPorFecha($fecha)
+    {
+        try {
+            $tareas = $this->repository->getTareasConFiltros(['fecha' => $fecha]);
+            
+            return $this->success([
+                "tareas" => $tareas,
+                "fecha" => $fecha,
+                "total" => count($tareas)
+            ], 'Tareas obtenidas para la fecha especificada');
+        } catch (Exception $e) {
+            Logger::error('Error al obtener tareas por fecha', ['error' => $e->getMessage()]);
+            return $this->serverError('Error al obtener tareas');
+        }
+    }
+
+    /**
+     * POST /admin/tareas
+     * Crear nueva tarea (formato legacy sin encriptación)
+     */
+    public function createTareaAdmin()
+    {
+        try {
+            $userData = $this->getAuthenticatedUser();
+            $userId = $userData['id'] ?? null;
+            
+            $data = json_decode($this->app->request()->getBody(), true);
+            
+            if (empty($data['titulo'])) {
+                return $this->validationError('El título es requerido');
+            }
+            
+            $taskId = $this->repository->crearTareaAdmin($data, $userId);
+            $tarea = $this->repository->getTareaById($taskId);
+            
+            Logger::info('Tarea creada', ['id' => $taskId, 'user_id' => $userId]);
+            return $this->success($tarea, 'Tarea creada correctamente', 201);
+        } catch (Exception $e) {
+            Logger::error('Error al crear tarea', ['error' => $e->getMessage()]);
+            return $this->serverError('Error al crear tarea');
+        }
+    }
+
+    /**
+     * PUT /admin/tareas/:id
+     * Actualizar tarea (formato legacy)
+     */
+    public function updateTareaAdmin($taskId)
+    {
+        try {
+            $data = json_decode($this->app->request()->getBody(), true);
+            
+            $this->repository->actualizarTareaAdmin((int)$taskId, $data);
+            $tarea = $this->repository->getTareaById((int)$taskId);
+            
+            Logger::info('Tarea actualizada', ['id' => $taskId]);
+            return $this->success($tarea, 'Tarea actualizada correctamente');
+        } catch (Exception $e) {
+            Logger::error('Error al actualizar tarea', ['error' => $e->getMessage()]);
+            return $this->serverError('Error al actualizar tarea');
+        }
+    }
+
+    /**
+     * DELETE /admin/tareas/:id
+     * Eliminar tarea (formato legacy - hard delete)
+     */
+    public function deleteTareaAdmin($taskId)
+    {
+        try {
+            $this->repository->eliminarTareaAdmin((int)$taskId);
+            
+            Logger::info('Tarea eliminada', ['id' => $taskId]);
+            return $this->success(['id' => $taskId], 'Tarea eliminada correctamente');
+        } catch (Exception $e) {
+            Logger::error('Error al eliminar tarea', ['error' => $e->getMessage()]);
+            return $this->serverError('Error al eliminar tarea');
+        }
+    }
+
+    /**
+     * POST /admin/tareas/:id/asignar
+     * Auto-asignar tarea al usuario autenticado
+     */
+    public function asignarTareaAdmin($taskId)
+    {
+        try {
+            $user = $this->getAuthenticatedUser();
+            $userId = $user['id'] ?? $user['user_id'] ?? null;
+            
+            if (!$userId) {
+                return $this->validationError('Usuario no autenticado', 401);
+            }
+
+            $taskId = (int)$taskId;
+
+            // Verificar que la tarea puede ser asignada
+            if (!$this->repository->canBeAssigned($taskId)) {
+                return $this->validationError('Esta tarea no está disponible para asignación');
+            }
+            
+            // Validar que solo se pueden asignar tareas del día actual
+            $tarea = $this->repository->getTareaById($taskId);
+            if ($tarea) {
+                $fechaTarea = $tarea['fechaAsignacion'];
+                $hoy = date('Y-m-d');
+                if ($fechaTarea < $hoy) {
+                    return $this->validationError('Solo puedes auto-asignarte tareas del día de hoy');
+                }
+            }
+
+            $this->repository->asignarTarea($taskId, $userId);
+            
+            Logger::info('Tarea asignada', ['tareaId' => $taskId, 'userId' => $userId]);
+            return $this->success(['tareaId' => $taskId, 'userId' => $userId], 'Tarea asignada correctamente');
+        } catch (Exception $e) {
+            Logger::error('Error al asignar tarea', ['error' => $e->getMessage()]);
+            return $this->serverError('Error al asignar tarea');
+        }
+    }
+
+    /**
+     * PUT /admin/tareas/:id/iniciar
+     * Iniciar tarea (cambiar a 'En progreso')
+     */
+    public function iniciarTareaAdmin($taskId)
+    {
+        try {
+            $taskId = (int)$taskId;
+            
+            // Validar que no se puede iniciar tareas de días anteriores
+            $tarea = $this->repository->getTareaById($taskId);
+            if ($tarea) {
+                $fechaTarea = $tarea['fechaAsignacion'];
+                $hoy = date('Y-m-d');
+                if ($fechaTarea < $hoy) {
+                    return $this->validationError('No puedes iniciar tareas de días anteriores');
+                }
+            }
+            
+            $this->repository->iniciarTarea($taskId);
+            $tarea = $this->repository->getTareaById($taskId);
+            
+            Logger::info('Tarea iniciada', ['id' => $taskId]);
+            return $this->success($tarea, 'Tarea iniciada correctamente');
+        } catch (Exception $e) {
+            Logger::error('Error al iniciar tarea', ['error' => $e->getMessage()]);
+            return $this->serverError('Error al iniciar tarea');
+        }
+    }
+
+    /**
+     * POST /admin/tareas/:id/completar
+     * Completar tarea con observaciones y evidencias (soporta múltiples imágenes)
+     */
+    public function completarTareaAdmin($taskId)
+    {
+        try {
+            $taskId = (int)$taskId;
+            $observaciones = $this->app->request()->post('observaciones') ?? '';
+            
+            // Obtener usuario autenticado
+            $user = $this->getAuthenticatedUser();
+            $userId = $user['id'] ?? $user['user_id'] ?? null;
+            
+            // Procesar archivos subidos
+            $uploadResult = $this->processUploadedFiles();
+            if ($uploadResult['error']) {
+                return $this->validationError($uploadResult['error']);
+            }
+            
+            // Guardar cada archivo en disco
+            $imagenesGuardadas = [];
+            foreach ($uploadResult['files'] as $file) {
+                $savedFile = $this->saveFileToDisk($file, $taskId, $userId);
+                if (!$savedFile) {
+                    return $this->serverError("Error al guardar el archivo: {$file['name']}");
+                }
+                $imagenesGuardadas[] = $savedFile;
+            }
+            
+            // Registrar evidencias en BD
+            if ($userId && !empty($imagenesGuardadas)) {
+                $this->repository->guardarEvidencias($taskId, $userId, $imagenesGuardadas, $observaciones);
+            }
+            
+            // Completar la tarea
+            $this->repository->completarTarea($taskId, $observaciones);
+            $tarea = $this->repository->getTareaById($taskId);
+            
+            $tarea['imagenes_guardadas'] = count($imagenesGuardadas);
+            
+            Logger::info('Tarea completada', ['id' => $taskId, 'imagenes' => count($imagenesGuardadas)]);
+            return $this->success($tarea, 'Tarea completada correctamente');
+            
+        } catch (Exception $e) {
+            Logger::error('Error al completar tarea', ['error' => $e->getMessage()]);
+            return $this->serverError('Error al completar tarea');
+        }
+    }
+
+    /**
+     * PUT /admin/tareas/:id/reabrir
+     * Reabrir tarea completada (formato legacy)
+     */
+    public function reabrirTareaAdmin($taskId)
+    {
+        try {
+            $taskId = (int)$taskId;
+            $data = json_decode($this->app->request()->getBody(), true);
+            
+            $motivo = $data['motivo'] ?? '';
+            $observaciones = $data['observaciones'] ?? null;
+            
+            if (empty($motivo)) {
+                return $this->validationError('El motivo de reapertura es requerido');
+            }
+            
+            // Obtener usuario autenticado
+            $user = $this->getAuthenticatedUser();
+            $userId = $user['id'] ?? $user['user_id'] ?? 0;
+            
+            // Nuevos valores opcionales
+            $newValues = [];
+            if (isset($data['assigned_user_id'])) {
+                $newValues['assigned_user_id'] = $data['assigned_user_id'];
+            }
+            if (isset($data['deadline']) || isset($data['fechaVencimiento'])) {
+                $newValues['deadline'] = $data['deadline'] ?? $data['fechaVencimiento'];
+            }
+            if (isset($data['priority']) || isset($data['prioridad'])) {
+                $newValues['priority'] = $data['priority'] ?? $this->priorityToInternal($data['prioridad'] ?? 'medium');
+            }
+            
+            $result = $this->repository->reopen($taskId, $userId, $motivo, $observaciones, !empty($newValues) ? $newValues : null);
+            
+            if (!$result) {
+                return $this->validationError('No se pudo reabrir la tarea. Verifica que esté completada o incompleta.');
+            }
+            
+            $tarea = $this->repository->getTareaById($taskId);
+            
+            Logger::info('Tarea reabierta', ['id' => $taskId, 'motivo' => $motivo, 'por' => $userId]);
+            return $this->success($tarea, 'Tarea reabierta correctamente');
+        } catch (Exception $e) {
+            Logger::error('Error al reabrir tarea', ['error' => $e->getMessage()]);
+            return $this->serverError('Error al reabrir tarea');
+        }
+    }
+    
+    /**
+     * Convierte prioridad legacy a formato interno
+     */
+    private function priorityToInternal(string $priority): string
+    {
+        $map = ['Alta' => 'high', 'Media' => 'medium', 'Baja' => 'low'];
+        return $map[$priority] ?? $priority;
+    }
+
+    // ============================================================
+    // SECCIÓN: MÉTODOS PÚBLICOS (ENDPOINTS CON ENCRIPTACIÓN)
     // ============================================================
 
     /**
@@ -67,7 +504,7 @@ class TaskController
                     return $v !== null && $v !== '';
                 });
 
-                $tasks = $this->repository->getAllForAdmin($filters);
+                $tasks = $this->repository->getTareas(null, $filters);
 
                 Logger::info('Admin consultó lista de tareas', [
                     'admin_id' => $userData['id'],
@@ -154,8 +591,8 @@ class TaskController
                 return $this->sendResponse($this->validator->createValidationError());
             }
 
-            // Establecer status por defecto (importante: no tiene default en BD)
-            $data['status'] = self::DEFAULT_STATUS;
+            // Establecer status por defecto usando constante global
+            $data['status'] = STATUS_PENDING;
 
             // Sanitizar datos
             $data['title'] = trim($data['title']);
@@ -219,7 +656,7 @@ class TaskController
             $taskId = (int)$taskId;
 
             // Verificar que la tarea existe
-            $task = $this->repository->getById($taskId);
+            $task = $this->repository->getTareaById($taskId);
 
             if (!$task) {
                 return $this->sendResponse($this->validator->taskNotFound());
@@ -309,7 +746,7 @@ class TaskController
             $taskId = (int)$taskId;
 
             // Verificar que la tarea existe
-            $task = $this->repository->getById($taskId);
+            $task = $this->repository->getTareaById($taskId);
 
             if (!$task) {
                 return $this->sendResponse($this->validator->taskNotFound());
@@ -337,57 +774,54 @@ class TaskController
                 return $this->sendResponse($this->validator->cannotComplete());
             }
 
-            // Validar imagen de evidencia (opcional ahora)
-            $hasImage = isset($_FILES['evidence']) && !empty($_FILES['evidence']['tmp_name']);
             $observaciones = isset($_POST['observaciones']) ? trim($_POST['observaciones']) : '';
+            
+            // Usar helper para procesar archivos
+            $uploadResult = $this->processUploadedFiles();
+            $hasFiles = !empty($uploadResult['files']);
 
             // Requerimos al menos observaciones
-            if (empty($observaciones) && !$hasImage) {
+            if (empty($observaciones) && !$hasFiles) {
                 return $this->sendResponse([
                     'tipo' => 0,
                     'mensajes' => ['Debe proporcionar observaciones y/o imagen de evidencia.'],
                     'data' => null
                 ]);
             }
+            
+            // Validar error de subida
+            if ($uploadResult['error']) {
+                return $this->sendResponse([
+                    'tipo' => 0,
+                    'mensajes' => [$uploadResult['error']],
+                    'data' => null
+                ]);
+            }
 
             $evidencePath = null;
+            $imagenesGuardadas = [];
 
-            if ($hasImage) {
-                $file = $_FILES['evidence'];
-
-                // Validar tamaño máximo 1.5 MB
-                $maxSizeKb = 1536; // 1.5 MB en KB
-                $fileSizeKb = $file['size'] / 1024;
-
-                if ($fileSizeKb > $maxSizeKb) {
-                    return $this->sendResponse([
-                        'tipo' => 0,
-                        'mensajes' => ['La imagen no puede exceder 1.5 MB.'],
-                        'data' => null
-                    ]);
-                }
-
+            foreach ($uploadResult['files'] as $file) {
                 if (!$this->validator->validateCompletionImage($file)) {
                     return $this->sendResponse($this->validator->imageValidationError());
                 }
 
                 // Procesar y guardar imagen
-                $evidencePath = $this->saveEvidenceImage($file, $taskId, $userData['id']);
+                $savedFile = $this->saveFileToDisk($file, $taskId, $userData['id']);
 
-                if (!$evidencePath) {
+                if (!$savedFile) {
                     return $this->sendResponse($this->validator->imageUploadError());
                 }
-
-                // Guardar en task_evidence también
-                $this->repository->addEvidence(
-                    $taskId,
-                    $userData['id'],
-                    $evidencePath,
-                    $file['name'],
-                    (int)$fileSizeKb,
-                    $file['type'],
-                    $observaciones
-                );
+                
+                $imagenesGuardadas[] = $savedFile;
+                if (!$evidencePath) {
+                    $evidencePath = $savedFile['path'];
+                }
+            }
+            
+            // Guardar evidencias en BD
+            if (!empty($imagenesGuardadas)) {
+                $this->repository->guardarEvidencias($taskId, $userData['id'], $imagenesGuardadas, $observaciones);
             }
 
             // Completar tarea con observaciones
@@ -398,14 +832,14 @@ class TaskController
                     'task_id' => $taskId,
                     'user_id' => $userData['id'],
                     'username' => $userData['username'],
-                    'evidence_path' => $evidencePath,
+                    'imagenes' => count($imagenesGuardadas),
                     'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
                 ]);
 
                 $response = $this->validator->completeSuccess();
                 $response['data'] = [
                     'completed_at' => date('Y-m-d H:i:s'),
-                    'evidence_image' => $evidencePath
+                    'imagenes_guardadas' => count($imagenesGuardadas)
                 ];
                 return $this->sendResponse($response);
             }
@@ -438,7 +872,7 @@ class TaskController
             }
 
             $taskId = (int)$taskId;
-            $task = $this->repository->getById($taskId);
+            $task = $this->repository->getTareaById($taskId);
 
             if (!$task) {
                 return $this->sendResponse($this->validator->taskNotFound());
@@ -499,7 +933,7 @@ class TaskController
             $taskId = (int)$taskId;
 
             // Verificar que la tarea existe
-            $task = $this->repository->getById($taskId);
+            $task = $this->repository->getTareaById($taskId);
 
             if (!$task) {
                 return $this->sendResponse($this->validator->taskNotFound());
@@ -575,7 +1009,7 @@ class TaskController
             $taskId = (int)$taskId;
 
             // Verificar que la tarea existe
-            $task = $this->repository->getById($taskId);
+            $task = $this->repository->getTareaById($taskId);
 
             if (!$task) {
                 return $this->sendResponse($this->validator->taskNotFound());
@@ -641,7 +1075,7 @@ class TaskController
             $taskId = (int)$taskId;
 
             // Verificar que la tarea existe
-            $task = $this->repository->getById($taskId);
+            $task = $this->repository->getTareaById($taskId);
 
             if (!$task) {
                 return $this->sendResponse($this->validator->taskNotFound());
@@ -670,9 +1104,21 @@ class TaskController
 
             $motivo = trim($data['motivo']);
             $observaciones = isset($data['observaciones']) ? trim($data['observaciones']) : null;
+            
+            // Nuevos valores opcionales
+            $newValues = [];
+            if (isset($data['assigned_user_id'])) {
+                $newValues['assigned_user_id'] = $data['assigned_user_id'];
+            }
+            if (isset($data['deadline']) || isset($data['fechaVencimiento'])) {
+                $newValues['deadline'] = $data['deadline'] ?? $data['fechaVencimiento'];
+            }
+            if (isset($data['priority']) || isset($data['prioridad'])) {
+                $newValues['priority'] = $data['priority'] ?? $this->priorityToInternal($data['prioridad'] ?? 'medium');
+            }
 
             // Reabrir tarea
-            $result = $this->repository->reopen($taskId, $userData['id'], $motivo, $observaciones);
+            $result = $this->repository->reopen($taskId, $userData['id'], $motivo, $observaciones, !empty($newValues) ? $newValues : null);
 
             if ($result) {
                 Logger::info('Tarea reabierta', [
@@ -878,16 +1324,14 @@ class TaskController
     }
 
     /**
-     * Guarda la imagen de evidencia
+     * Guarda la imagen de evidencia usando constantes globales
      */
     private function saveEvidenceImage(array $file, int $taskId, int $userId): ?string
     {
         try {
-            // Crear directorio si no existe
-            $uploadDir = __DIR__ . '/..' . self::UPLOAD_DIR;
-
-            if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0755, true);
+            // Crear directorio si no existe (usando constante global)
+            if (!is_dir(UPLOAD_DIR)) {
+                mkdir(UPLOAD_DIR, 0755, true);
             }
 
             // Generar nombre único
@@ -900,11 +1344,11 @@ class TaskController
                 strtolower($extension)
             );
 
-            $destination = $uploadDir . $filename;
+            $destination = UPLOAD_DIR . $filename;
 
             // Mover archivo
             if (move_uploaded_file($file['tmp_name'], $destination)) {
-                return self::UPLOAD_DIR . $filename;
+                return UPLOAD_PATH_RELATIVE . $filename;
             }
 
             return null;
@@ -931,4 +1375,30 @@ class TaskController
             'data' => $responseData['data'] ?? null
         ], JSON_UNESCAPED_UNICODE);
     }
+
+    /**
+     * Envía respuesta en formato legacy (para endpoints admin)
+     * Similar a sendResponse pero con manejo de status HTTP
+     */
+    private function sendLegacyResponse(array $data, int $statusCode = 200): void
+    {
+        $response = $this->app->response();
+        $response->header('Content-Type', 'application/json; charset=utf-8');
+        $response->status($statusCode);
+        
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        
+        // Si hay error de JSON, loguear y devolver error genérico
+        if ($json === false) {
+            Logger::error('Error al codificar JSON', ['error' => json_last_error_msg()]);
+            $json = json_encode([
+                'tipo' => 3,
+                'mensajes' => ['Error interno al procesar respuesta'],
+                'data' => null
+            ]);
+        }
+        
+        $response->body($json);
+    }
 }
+

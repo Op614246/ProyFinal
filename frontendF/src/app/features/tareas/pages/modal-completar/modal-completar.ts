@@ -97,31 +97,45 @@ export class ModalCompletar implements OnInit {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/jpeg,image/png,image/gif,image/webp';
-    input.multiple = false; // Una imagen a la vez para validar correctamente
+    input.multiple = true; // Permitir múltiples imágenes
     
     input.onchange = async (event: any) => {
-      const file = event.target.files[0];
-      if (!file) return;
+      const files: FileList = event.target.files;
+      if (!files || files.length === 0) return;
 
-      // Validar tipo de archivo
-      if (!this.ALLOWED_TYPES.includes(file.type)) {
-        await this.mostrarAlertaError(
-          'Formato no permitido',
-          'Solo se permiten imágenes en formato JPEG, PNG, GIF o WebP.'
-        );
-        return;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        // Validar tipo de archivo
+        if (!this.ALLOWED_TYPES.includes(file.type)) {
+          await this.mostrarAlertaError(
+            'Formato no permitido',
+            `El archivo "${file.name}" no está permitido. Solo se aceptan JPEG, PNG, GIF o WebP.`
+          );
+          continue;
+        }
+
+        // Validar tamaño (máximo 1.5MB)
+        if (file.size > this.MAX_FILE_SIZE) {
+          const sizeInMB = (file.size / (1024 * 1024)).toFixed(2);
+          await this.mostrarAlertaError(
+            'Imagen demasiado grande',
+            `El archivo "${file.name}" pesa ${sizeInMB}MB. El máximo permitido es 1.5MB.`
+          );
+          continue;
+        }
+
+        // Procesar archivo válido
+        await this.procesarArchivo(file);
       }
+    };
+    
+    input.click();
+  }
 
-      // Validar tamaño (máximo 1.5MB)
-      if (file.size > this.MAX_FILE_SIZE) {
-        const sizeInMB = (file.size / (1024 * 1024)).toFixed(2);
-        await this.mostrarAlertaError(
-          'Imagen demasiado grande',
-          `El archivo pesa ${sizeInMB}MB. El tamaño máximo permitido es 1.5MB. Por favor, reduce el tamaño de la imagen.`
-        );
-        return;
-      }
-
+  // Procesar un archivo de imagen
+  private procesarArchivo(file: File): Promise<void> {
+    return new Promise((resolve) => {
       this.cargandoImagen = true;
       this.cdr.markForCheck();
 
@@ -132,11 +146,10 @@ export class ModalCompletar implements OnInit {
         this.cargandoImagen = false;
         this.cdr.markForCheck();
         this.mostrarToast('Imagen agregada correctamente', 'success');
+        resolve();
       };
       reader.readAsDataURL(file);
-    };
-    
-    input.click();
+    });
   }
 
   // Mostrar alerta de error
@@ -174,7 +187,7 @@ export class ModalCompletar implements OnInit {
       completada: true,
       observaciones: this.observaciones.trim(),
       imagenes: this.imagenes,
-      imagen: this.imagenesArchivos.length > 0 ? this.imagenesArchivos[0] : null, // Primera imagen como File
+      imagenesArchivos: this.imagenesArchivos, // Todos los archivos
       fechaCompletado: new Date().toISOString(),
       tareaId: this.tarea?.id,
       subtareaId: this.subtarea?.id

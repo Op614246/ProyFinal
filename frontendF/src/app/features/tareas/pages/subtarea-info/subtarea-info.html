@@ -9,6 +9,21 @@
       <span class="-ml-12 text-[#000000]" *ngIf="!tareasService.apartadoadmin">Tarea N° 0{{tarea?.id}}</span>
       <span class="-ml-12 text-[#000000]" *ngIf="tareasService.apartadoadmin">Tarea</span>
     </ion-title>
+    <ion-buttons slot="end">
+      <!-- Botón editar (solo admin) -->
+      <ion-button *ngIf="isAdmin" fill="clear" size="small" (click)="editarSubtarea()">
+        <fa-icon [icon]="faPencil" class="text-xl text-blue-500"></fa-icon>
+      </ion-button>
+      <!-- Botón cambiar estado (siempre disponible) -->
+      <ion-button fill="solid" size="small" (click)="completarSubtarea()"
+                   [color]="tarea?.estado === 'Completada' ? 'success' : 'primary'"
+                   class="text-center flex items-center gap-1">
+        <ion-icon *ngIf="tarea?.estado === 'Pendiente'" name="play-circle-outline" class="text-lg mr-1"></ion-icon>
+        <ion-icon *ngIf="tarea?.estado === 'En progreso'" name="pause-circle-outline" class="text-lg mr-1"></ion-icon>
+        <ion-icon *ngIf="tarea?.estado === 'Completada'" name="checkmark-circle" class="text-lg mr-1"></ion-icon>
+        <span class="text-xs">Estado</span>
+      </ion-button>
+    </ion-buttons>
   </ion-toolbar>
 </ion-header>
 
@@ -102,32 +117,6 @@
     </div>
 
     <!-- Comentarios removidos: la recolección de observaciones ahora se hace en el modal de completar -->
-
-    <!-- Archivos adjuntos -->
-    <div class="mb-4" *ngIf="tarea?.estado !== 'Pendiente'">
-      <h3 class="text-gray-700 text-xs font-bold mb-2">Archivos adjuntos <span class="text-[10px]">(Opcional)</span></h3>
-      <div class="flex items-center gap-2 mb-2">
-        <ion-icon name="information-circle-outline" class="text-blue-500 text-sm"></ion-icon>
-        <span class="text-gray-600 text-[10px]">Puedes adjuntar hasta 5 imágenes ≤ 5MB</span>
-      </div>
-
-      <div class="flex flex-wrap gap-2">
-        <div *ngFor="let archivo of archivosSubidos" 
-             class="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-300">
-          <img [src]="archivo.src" class="w-full h-full object-cover" alt="Archivo adjunto">
-          <button class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center"
-                  (click)="eliminarArchivo(archivo)">
-            <fa-icon [icon]="faXmark" class="text-[8px]"></fa-icon>
-          </button>
-        </div>
-        
-        <div *ngIf="tarea?.estado === 'En progreso' && archivosSubidos.length < 5"
-             class="flex items-center w-16 h-16 justify-center border-2 border-dashed border-gray-300 rounded-lg cursor-pointer"
-             (click)="subirArchivo()">
-          <ion-icon name="add-outline" class="text-gray-400 text-xl"></ion-icon>
-        </div>
-      </div>
-    </div>
 
     <div class="flex-grow"></div>
   </div>

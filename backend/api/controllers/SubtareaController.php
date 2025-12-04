@@ -1,9 +1,4 @@
 <?php
-/**
- * SubtareaController.php
- * 
- * Controlador para gestión de subtareas
- */
 
 require_once __DIR__ . '/../core/Logger.php';
 
@@ -17,28 +12,21 @@ class SubtareaController {
         $this->repository = new SubtareaRepository();
     }
     
-    /**
-     * Obtener subtareas de una tarea
-     * GET /tasks/:taskId/subtareas
-     */
     public function getSubtareasByTask($taskId) {
         try {
             $subtareas = $this->repository->getSubtareasByTaskId($taskId);
             $stats = $this->repository->getEstadisticasSubtareas($taskId);
 
-            // Log para depuración: cuántas subtareas y muestra de contenido
             Logger::debug('getSubtareasByTask payload', [
                 'task_id' => $taskId,
                 'count' => count($subtareas),
                 'sample' => array_slice($subtareas, 0, 5)
             ]);
 
-            // Devolver `data` como array de subtareas (esperado por el frontend)
             $this->sendResponse([
                 'tipo' => 1,
                 'mensajes' => ['Subtareas obtenidas correctamente'],
                 'data' => $subtareas,
-                // Compatibilidad: también exponer `subtareas` como clave directa
                 'subtareas' => $subtareas,
                 'meta' => [
                     'estadisticas' => $stats,
@@ -58,10 +46,6 @@ class SubtareaController {
         }
     }
     
-    /**
-     * Obtener una subtarea por ID
-     * GET /subtareas/:id
-     */
     public function getSubtarea($subtareaId) {
         try {
             $subtarea = $this->repository->getSubtareaById($subtareaId);
@@ -92,10 +76,6 @@ class SubtareaController {
         }
     }
     
-    /**
-     * Crear nueva subtarea
-     * POST /tasks/:taskId/subtareas
-     */
     public function crearSubtarea($taskId) {
         try {
             $body = json_decode($this->app->request()->getBody(), true);
@@ -160,10 +140,6 @@ class SubtareaController {
         }
     }
     
-    /**
-     * Crear nueva subtarea (task_id viene en el body)
-     * POST /subtareas
-     */
     public function crearSubtareaGeneral() {
         try {
             $body = json_decode($this->app->request()->getBody(), true);
@@ -504,9 +480,6 @@ class SubtareaController {
         }
     }
     
-    /**
-     * Envía respuesta JSON
-     */
     private function sendResponse($data, $status = 200) {
         $this->app->response()->status($status);
         $this->app->response()->header('Content-Type', 'application/json; charset=utf-8');

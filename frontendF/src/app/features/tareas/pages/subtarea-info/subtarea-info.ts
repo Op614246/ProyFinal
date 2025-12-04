@@ -1,7 +1,7 @@
 import { Location } from '@angular/common';
 import { Component, Input, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { faFlag, faXmark } from '@fortawesome/pro-regular-svg-icons';
+import { faFlag, faXmark, faPencil } from '@fortawesome/pro-regular-svg-icons';
 import { ActionSheetController, AlertController, ModalController, ToastController, NavParams } from '@ionic/angular';
 import { ModalForm } from '../../modal-form/modal-form';
 import { Tarea, TareaAdmin, TareasService } from '../../service/tareas.service';
@@ -30,6 +30,7 @@ export class SubtareaInfo implements OnInit {
   
   public faFlag = faFlag;
   public faXmark = faXmark;
+  public faPencil = faPencil;
 
   get isApartadoAdmin(): boolean {
     return this.tareasService.apartadoadmin;
@@ -246,6 +247,82 @@ export class SubtareaInfo implements OnInit {
     await alert.present();
   }
 
+  // Abrir selector de estado y aplicar cambio (Pendiente/En progreso/Completada)
+  async completarSubtarea() {
+    if (!this.tarea || !this.tareaadmin) {
+      this.mostrarToast('Faltan datos de la subtarea', 'danger');
+      return;
+    }
+
+    const alert = await this.alertController.create({
+      header: 'Cambiar Estado',
+      message: 'Selecciona el nuevo estado para esta subtarea',
+      inputs: [
+        { type: 'radio', label: 'Pendiente', value: 'Pendiente', checked: this.tarea.estado === 'Pendiente' },
+        { type: 'radio', label: 'En progreso', value: 'En progreso', checked: this.tarea.estado === 'En progreso' },
+        { type: 'radio', label: 'Completada', value: 'Completada', checked: this.tarea.estado === 'Completada' }
+      ],
+      buttons: [
+        { text: 'Cancelar', role: 'cancel' },
+        {
+          text: 'Confirmar',
+          role: 'confirm',
+          handler: (nuevoEstado: string) => {
+            if (nuevoEstado && nuevoEstado !== this.tarea!.estado) {
+              this.cambiarEstadoSubtarea(nuevoEstado as 'Pendiente' | 'En progreso' | 'Completada');
+            }
+          }
+        }
+      ]
+    });
+
+    await alert.present();
+  }
+
+  private cambiarEstadoSubtarea(nuevoEstado: 'Pendiente' | 'En progreso' | 'Completada') {
+    if (!this.tarea || !this.tareaadmin) return;
+
+    if (nuevoEstado === 'Completada') {
+      // Completar vía endpoint admin
+      this.tareasService.completarSubtareaAdmin(this.tareaadmin.id, this.tarea.id).subscribe({
+        next: (response: any) => {
+          if (response?.tipo === 1) {
+            this.tarea!.estado = 'Completada';
+            this.tarea!.completada = true;
+            this.mostrarToast('Subtarea completada correctamente', 'success');
+            this.tareasService.notificarActualizacion();
+            this.cerrarModal({ actualizada: true }, 'confirm');
+          } else {
+            this.mostrarToast(response?.mensajes?.[0] || 'No se pudo completar', 'danger');
+          }
+        },
+        error: (err: any) => {
+          console.error('Error completando subtarea:', err);
+          this.mostrarToast('Error al completar la subtarea', 'danger');
+        }
+      });
+    } else {
+      // Actualizar estado vía endpoint de subtareas
+      const subtareaData = { estado: nuevoEstado };
+      this.tareasService.actualizarSubtarea(this.tarea.id, subtareaData).subscribe({
+        next: (response: any) => {
+          if (response?.tipo === 1) {
+            this.tarea!.estado = nuevoEstado;
+            this.mostrarToast('Estado actualizado correctamente', 'success');
+            this.tareasService.notificarActualizacion();
+            this.cerrarModal({ actualizada: true }, 'confirm');
+          } else {
+            this.mostrarToast(response?.mensajes?.[0] || 'Error al actualizar', 'danger');
+          }
+        },
+        error: (err: any) => {
+          console.error('Error actualizando estado:', err);
+          this.mostrarToast('Error al actualizar estado', 'danger');
+        }
+      });
+    }
+  }
+
   async abrirModalReaperturar() {
     const modal = await this.modalController.create({
       component: ModalForm,
@@ -269,6 +346,19 @@ export class SubtareaInfo implements OnInit {
         this.mostrarToast('Tarea reaperturada correctamente', 'success');
       }
     }
+  }
+
+  // Abrir el modal de edición de subtarea (padre lo gestiona)
+  editarSubtarea() {
+    if (!this.tarea || !this.tareaadmin) {
+      this.mostrarToast('No se puede editar: faltan datos', 'danger');
+      return;
+    }
+    this.modalController.dismiss({
+      editarSubtarea: true,
+      subtarea: this.tarea,
+      tareaId: this.tareaadmin.id
+    }, 'edit');
   }
 
   get textoBotonAccion(): string {

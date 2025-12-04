@@ -2,7 +2,8 @@
 /**
  * SubtareaRepository.php
  * 
- * Repositorio para gestión de subtareas vinculadas a tasks
+ * Repositorio para gestion de subtareas vinculadas a tasks
+ * NOTA: La tabla subtareas usa 'estado' (Pendiente, En progreso)
  */
 
 class SubtareaRepository {
@@ -24,12 +25,8 @@ class SubtareaRepository {
                 s.descripcion,
                 s.estado,
                 s.prioridad,
-                s.completada,
                 s.progreso,
-                DATE_FORMAT(s.fechaAsignacion, '%Y-%m-%d') as fechaAsignacion,
-                DATE_FORMAT(s.fechaVencimiento, '%Y-%m-%d') as fechaVencimiento,
-                s.horainicio,
-                s.horafin,
+                s.completed_by,
                 s.categoria_id,
                 c.nombre as categoria_nombre,
                 c.color as categoria_color,
@@ -41,11 +38,11 @@ class SubtareaRepository {
             FROM subtareas s
             LEFT JOIN categorias c ON s.categoria_id = c.id
             LEFT JOIN users u ON s.usuarioasignado_id = u.id
-            WHERE s.task_id = ?
+            WHERE s.task_id = ? AND s.is_deleted = 0
             ORDER BY 
                 FIELD(s.estado, 'En progreso', 'Pendiente', 'Completada', 'Cerrada'),
                 FIELD(s.prioridad, 'Alta', 'Media', 'Baja'),
-                s.horainicio ASC
+                s.created_at ASC
         ";
         
         $stmt = $this->db->prepare($sql);
@@ -65,12 +62,8 @@ class SubtareaRepository {
                 s.descripcion,
                 s.estado,
                 s.prioridad,
-                s.completada,
                 s.progreso,
-                DATE_FORMAT(s.fechaAsignacion, '%Y-%m-%d') as fechaAsignacion,
-                DATE_FORMAT(s.fechaVencimiento, '%Y-%m-%d') as fechaVencimiento,
-                s.horainicio,
-                s.horafin,
+                s.completed_by,
                 s.categoria_id,
                 c.nombre as categoria_nombre,
                 s.usuarioasignado_id,
@@ -80,7 +73,7 @@ class SubtareaRepository {
             FROM subtareas s
             LEFT JOIN categorias c ON s.categoria_id = c.id
             LEFT JOIN users u ON s.usuarioasignado_id = u.id
-            WHERE s.id = ?
+            WHERE s.id = ? AND s.is_deleted = 0
         ";
         
         $stmt = $this->db->prepare($sql);
@@ -95,12 +88,10 @@ class SubtareaRepository {
         $sql = "
             INSERT INTO subtareas (
                 task_id, titulo, descripcion, estado, prioridad,
-                fechaAsignacion, fechaVencimiento, horainicio, horafin,
-                categoria_id, usuarioasignado_id, progreso, completada
+                categoria_id, usuarioasignado_id, progreso
             ) VALUES (
                 :task_id, :titulo, :descripcion, :estado, :prioridad,
-                :fechaAsignacion, :fechaVencimiento, :horainicio, :horafin,
-                :categoria_id, :usuarioasignado_id, 0, 0
+                :categoria_id, :usuarioasignado_id, 0
             )
         ";
 
@@ -111,19 +102,12 @@ class SubtareaRepository {
             ':descripcion' => $data['descripcion'] ?? null,
             ':estado' => $data['estado'] ?? 'Pendiente',
             ':prioridad' => $data['prioridad'] ?? 'Media',
-            ':fechaAsignacion' => $data['fechaAsignacion'] ?? date('Y-m-d'),
-            ':fechaVencimiento' => $data['fechaVencimiento'] ?? null,
-            ':horainicio' => $data['horainicio'] ?? null,
-            ':horafin' => $data['horafin'] ?? null,
             ':categoria_id' => $data['categoria_id'] ?? null,
             ':usuarioasignado_id' => $data['usuarioasignado_id'] ?? null
         ]);
 
         $subtareaId = $this->db->lastInsertId();
-
-        // Actualizar progreso de la tarea padre
         $this->actualizarProgresoTarea($data['task_id']);
-
         return $subtareaId;
     }
     
@@ -136,8 +120,7 @@ class SubtareaRepository {
         
         $camposPermitidos = [
             'titulo', 'descripcion', 'estado', 'prioridad',
-            'fechaAsignacion', 'fechaVencimiento', 'horainicio', 'horafin',
-            'categoria_id', 'usuarioasignado_id', 'progreso'
+            'categoria_id', 'usuarioasignado_id', 'progreso', 'completed_by'
         ];
         
         foreach ($camposPermitidos as $campo) {
@@ -147,9 +130,7 @@ class SubtareaRepository {
             }
         }
         
-        // Si el estado es 'Completada', marcar completada = 1 y progreso = 100
         if (isset($data['estado']) && $data['estado'] === 'Completada') {
-            $campos[] = "completada = 1";
             $campos[] = "progreso = 100";
         }
         
@@ -161,7 +142,6 @@ class SubtareaRepository {
         $stmt = $this->db->prepare($sql);
         $result = $stmt->execute($params);
         
-        // Obtener task_id para actualizar progreso
         $subtarea = $this->getSubtareaById($subtareaId);
         if ($subtarea) {
             $this->actualizarProgresoTarea($subtarea['task_id']);
@@ -174,7 +154,6 @@ class SubtareaRepository {
      * Eliminar subtarea
      */
     public function eliminarSubtarea($subtareaId) {
-        // Primero obtener task_id
         $subtarea = $this->getSubtareaById($subtareaId);
         $taskId = $subtarea ? $subtarea['task_id'] : null;
         
@@ -182,7 +161,6 @@ class SubtareaRepository {
         $stmt = $this->db->prepare($sql);
         $result = $stmt->execute([$subtareaId]);
         
-        // Actualizar progreso de la tarea padre
         if ($taskId) {
             $this->actualizarProgresoTarea($taskId);
         }
@@ -194,18 +172,10 @@ class SubtareaRepository {
      * Completar subtarea
      */
     public function completarSubtarea($subtareaId, $observaciones = null) {
-        $sql = "
-            UPDATE subtareas 
-            SET estado = 'Completada', 
-                completada = 1, 
-                progreso = 100
-            WHERE id = ?
-        ";
-        
+        $sql = "UPDATE subtareas SET estado = 'Completada', progreso = 100 WHERE id = ?";
         $stmt = $this->db->prepare($sql);
         $result = $stmt->execute([$subtareaId]);
         
-        // Obtener task_id para actualizar progreso
         $subtarea = $this->getSubtareaById($subtareaId);
         if ($subtarea) {
             $this->actualizarProgresoTarea($subtarea['task_id']);
@@ -215,7 +185,7 @@ class SubtareaRepository {
     }
     
     /**
-     * Iniciar subtarea (cambiar a En progreso)
+     * Iniciar subtarea
      */
     public function iniciarSubtarea($subtareaId) {
         $sql = "UPDATE subtareas SET estado = 'En progreso' WHERE id = ?";
@@ -224,16 +194,15 @@ class SubtareaRepository {
     }
     
     /**
-     * Calcular y actualizar el progreso de una tarea basado en sus subtareas
+     * Calcular y actualizar progreso de tarea
      */
     public function actualizarProgresoTarea($taskId) {
-        // Calcular progreso basado en subtareas completadas
         $sql = "
             SELECT 
                 COUNT(*) as total,
-                SUM(CASE WHEN completada = 1 THEN 1 ELSE 0 END) as completadas
+                SUM(CASE WHEN estado = 'Completada' THEN 1 ELSE 0 END) as completadas
             FROM subtareas 
-            WHERE task_id = ?
+            WHERE task_id = ? AND is_deleted = 0
         ";
         
         $stmt = $this->db->prepare($sql);
@@ -245,18 +214,12 @@ class SubtareaRepository {
             $progreso = round(($stats['completadas'] / $stats['total']) * 100);
         }
         
-        // Actualizar progreso en la tarea
         $sqlUpdate = "UPDATE tasks SET progreso = ? WHERE id = ?";
         $stmtUpdate = $this->db->prepare($sqlUpdate);
         $stmtUpdate->execute([$progreso, $taskId]);
         
-        // Si todas las subtareas están completadas, marcar tarea como completada
         if ($stats['total'] > 0 && $stats['completadas'] == $stats['total']) {
-            $sqlComplete = "
-                UPDATE tasks 
-                SET status = 'completed', completed_at = NOW() 
-                WHERE id = ? AND status != 'completed'
-            ";
+            $sqlComplete = "UPDATE tasks SET status = 'completed', completed_at = NOW() WHERE id = ? AND status != 'completed'";
             $stmtComplete = $this->db->prepare($sqlComplete);
             $stmtComplete->execute([$taskId]);
         }
@@ -265,7 +228,7 @@ class SubtareaRepository {
     }
     
     /**
-     * Obtener estadísticas de subtareas de una tarea
+     * Obtener estadisticas de subtareas
      */
     public function getEstadisticasSubtareas($taskId) {
         $sql = "
@@ -273,9 +236,9 @@ class SubtareaRepository {
                 COUNT(*) as total,
                 SUM(CASE WHEN estado = 'Pendiente' THEN 1 ELSE 0 END) as pendientes,
                 SUM(CASE WHEN estado = 'En progreso' THEN 1 ELSE 0 END) as en_progreso,
-                SUM(CASE WHEN estado = 'Completada' OR completada = 1 THEN 1 ELSE 0 END) as completadas
+                SUM(CASE WHEN estado = 'Completada' THEN 1 ELSE 0 END) as completadas
             FROM subtareas 
-            WHERE task_id = ?
+            WHERE task_id = ? AND is_deleted = 0
         ";
         
         $stmt = $this->db->prepare($sql);
@@ -293,44 +256,29 @@ class SubtareaRepository {
     }
     
     /**
-     * Obtener subtareas asignadas a un usuario
+     * Obtener subtareas por usuario
      */
     public function getSubtareasByUsuario($usuarioId, $fecha = null) {
         $sql = "
             SELECT 
-                s.id,
-                s.task_id,
-                s.titulo,
-                s.descripcion,
-                s.estado,
-                s.prioridad,
-                s.completada,
-                s.progreso,
-                DATE_FORMAT(s.fechaAsignacion, '%Y-%m-%d') as fechaAsignacion,
-                DATE_FORMAT(s.fechaVencimiento, '%Y-%m-%d') as fechaVencimiento,
-                s.horainicio,
-                s.horafin,
+                s.id, s.task_id, s.titulo, s.descripcion, s.estado, s.prioridad, s.progreso,
+                s.completed_by,
                 t.title as tarea_titulo,
-                c.nombre as categoria_nombre,
-                c.color as categoria_color
+                c.nombre as categoria_nombre, c.color as categoria_color
             FROM subtareas s
             INNER JOIN tasks t ON s.task_id = t.id
             LEFT JOIN categorias c ON s.categoria_id = c.id
-            WHERE s.usuarioasignado_id = ?
+            WHERE s.usuarioasignado_id = ? AND s.is_deleted = 0
         ";
         
         $params = [$usuarioId];
         
         if ($fecha) {
-            $sql .= " AND DATE(s.fechaAsignacion) = ?";
+            $sql .= " AND DATE(s.created_at) = ?";
             $params[] = $fecha;
         }
         
-        $sql .= " ORDER BY 
-            FIELD(s.estado, 'En progreso', 'Pendiente', 'Completada'),
-            FIELD(s.prioridad, 'Alta', 'Media', 'Baja'),
-            s.horainicio ASC
-        ";
+        $sql .= " ORDER BY FIELD(s.estado, 'En progreso', 'Pendiente', 'Completada'), FIELD(s.prioridad, 'Alta', 'Media', 'Baja'), s.created_at ASC";
         
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);

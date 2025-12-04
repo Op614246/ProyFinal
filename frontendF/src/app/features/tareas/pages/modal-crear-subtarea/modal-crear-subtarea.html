@@ -1,6 +1,6 @@
 <ion-header>
   <ion-toolbar>
-    <ion-title class="text-base font-medium">Nueva Subtarea</ion-title>
+    <ion-title class="text-base font-medium">{{ tituloModal }}</ion-title>
     <ion-buttons slot="end">
       <ion-button fill="clear" (click)="cerrar()">
         <fa-icon [icon]="faXmark" class="text-gray-500"></fa-icon>
@@ -22,7 +22,7 @@
     <div class="space-y-1">
       <label class="block text-xs text-gray-600 font-medium">Título de la subtarea *</label>
       <ion-input
-        [(ngModel)]="titulo"
+        [(ngModel)]="tituloForm"
         placeholder="Ej. Verificar inventario de productos"
         fill="outline"
         class="text-sm">
@@ -33,7 +33,7 @@
     <div class="space-y-1">
       <label class="block text-xs text-gray-600 font-medium">Descripción (opcional)</label>
       <ion-textarea
-        [(ngModel)]="descripcion"
+        [(ngModel)]="descripcionForm"
         placeholder="Describe los detalles de la subtarea..."
         rows="3"
         fill="outline"
@@ -45,7 +45,7 @@
     <div class="space-y-1">
       <label class="block text-xs text-gray-600 font-medium">Prioridad</label>
       <ion-select
-        [(ngModel)]="prioridad"
+        [(ngModel)]="prioridadForm"
         placeholder="Seleccionar prioridad"
         fill="outline"
         interface="popover"
@@ -56,11 +56,26 @@
       </ion-select>
     </div>
 
+    <!-- Estado (solo para edición) -->
+    <div class="space-y-1" *ngIf="edit">
+      <label class="block text-xs text-gray-600 font-medium">Estado</label>
+      <ion-select
+        [(ngModel)]="estadoForm"
+        placeholder="Seleccionar estado"
+        fill="outline"
+        interface="popover"
+        class="text-sm">
+        <ion-select-option value="Pendiente">Pendiente</ion-select-option>
+        <ion-select-option value="En progreso">En progreso</ion-select-option>
+        <ion-select-option value="Completada">Completada</ion-select-option>
+      </ion-select>
+    </div>
+
     <!-- Usuario asignado (opcional) -->
     <div class="space-y-1">
       <label class="block text-xs text-gray-600 font-medium">Asignar a usuario (opcional)</label>
       <ion-select
-        [(ngModel)]="usuarioAsignadoId"
+        [(ngModel)]="usuarioAsignadoIdForm"
         placeholder="Sin asignar"
         fill="outline"
         interface="popover"
@@ -83,7 +98,7 @@
       Cancelar
     </ion-button>
     <ion-button expand="block" color="primary" class="flex-1" (click)="crearSubtarea()">
-      Crear Subtarea
+      {{ textoBoton }}
     </ion-button>
   </div>
 </ion-footer>

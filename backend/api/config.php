@@ -1,4 +1,53 @@
 <?php
+// =============================================================================
+// CONFIGURACIÓN GLOBAL DE LA API
+// =============================================================================
+
+// Zona horaria
+date_default_timezone_set('America/Lima');
+
+// =============================================================================
+// CONSTANTES DE EVIDENCIAS/ARCHIVOS
+// =============================================================================
+define('MAX_FILE_SIZE_KB', 1536);          // 1.5 MB en KB
+define('MAX_FILE_SIZE_BYTES', 1536 * 1024); // 1.5 MB en bytes
+define('ALLOWED_IMAGE_TYPES', ['image/jpeg', 'image/png', 'image/jpg', 'image/webp']);
+define('UPLOAD_DIR', __DIR__ . '/../uploads/evidencias/');
+define('UPLOAD_PATH_RELATIVE', 'uploads/evidencias/');
+
+// =============================================================================
+// CONSTANTES DE ESTADOS Y PRIORIDADES
+// =============================================================================
+define('STATUS_PENDING', 'pending');
+define('STATUS_IN_PROCESS', 'in_process');
+define('STATUS_COMPLETED', 'completed');
+define('STATUS_INCOMPLETE', 'incomplete');
+define('STATUS_INACTIVE', 'inactive');
+
+define('PRIORITY_HIGH', 'high');
+define('PRIORITY_MEDIUM', 'medium');
+define('PRIORITY_LOW', 'low');
+
+// Mapeo de estados internos a legacy (español)
+define('STATUS_MAP', [
+    'pending' => 'Pendiente',
+    'in_process' => 'En progreso',
+    'completed' => 'Completada',
+    'incomplete' => 'Incompleta',
+    'inactive' => 'Inactiva'
+]);
+
+// Mapeo de prioridades internas a legacy (español)
+define('PRIORITY_MAP', [
+    'high' => 'Alta',
+    'medium' => 'Media',
+    'low' => 'Baja'
+]);
+
+// =============================================================================
+// CONFIGURACIÓN DE ERRORES
+// =============================================================================
+
 // Desactivar errores en output para no romper JSON
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
