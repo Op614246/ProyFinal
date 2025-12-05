@@ -1,11 +1,4 @@
 <?php
-/**
- * SubtareaRepository.php
- * 
- * Repositorio para gestion de subtareas vinculadas a tasks
- * NOTA: La tabla subtareas usa 'estado' (Pendiente, En progreso)
- */
-
 class SubtareaRepository {
     private $db;
     
@@ -13,9 +6,6 @@ class SubtareaRepository {
         $this->db = DB::getInstance()->dbh;
     }
     
-    /**
-     * Obtener todas las subtareas de una tarea
-     */
     public function getSubtareasByTaskId($taskId) {
         $sql = "
             SELECT 
@@ -50,9 +40,6 @@ class SubtareaRepository {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
     
-    /**
-     * Obtener una subtarea por ID
-     */
     public function getSubtareaById($subtareaId) {
         $sql = "
             SELECT 
@@ -81,9 +68,6 @@ class SubtareaRepository {
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
     
-    /**
-     * Crear nueva subtarea
-     */
     public function crearSubtarea($data) {
         $sql = "
             INSERT INTO subtareas (
@@ -111,9 +95,6 @@ class SubtareaRepository {
         return $subtareaId;
     }
     
-    /**
-     * Actualizar subtarea
-     */
     public function actualizarSubtarea($subtareaId, $data) {
         $campos = [];
         $params = [':id' => $subtareaId];
@@ -150,9 +131,6 @@ class SubtareaRepository {
         return $result;
     }
     
-    /**
-     * Eliminar subtarea
-     */
     public function eliminarSubtarea($subtareaId) {
         $subtarea = $this->getSubtareaById($subtareaId);
         $taskId = $subtarea ? $subtarea['task_id'] : null;
@@ -168,9 +146,6 @@ class SubtareaRepository {
         return $result;
     }
     
-    /**
-     * Completar subtarea
-     */
     public function completarSubtarea($subtareaId, $observaciones = null) {
         $sql = "UPDATE subtareas SET estado = 'Completada', progreso = 100 WHERE id = ?";
         $stmt = $this->db->prepare($sql);
@@ -184,18 +159,12 @@ class SubtareaRepository {
         return $result;
     }
     
-    /**
-     * Iniciar subtarea
-     */
     public function iniciarSubtarea($subtareaId) {
         $sql = "UPDATE subtareas SET estado = 'En progreso' WHERE id = ?";
         $stmt = $this->db->prepare($sql);
         return $stmt->execute([$subtareaId]);
     }
     
-    /**
-     * Calcular y actualizar progreso de tarea
-     */
     public function actualizarProgresoTarea($taskId) {
         $sql = "
             SELECT 
@@ -227,9 +196,6 @@ class SubtareaRepository {
         return $progreso;
     }
     
-    /**
-     * Obtener estadisticas de subtareas
-     */
     public function getEstadisticasSubtareas($taskId) {
         $sql = "
             SELECT 
@@ -246,18 +212,12 @@ class SubtareaRepository {
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
     
-    /**
-     * Asignar subtarea a usuario
-     */
     public function asignarSubtarea($subtareaId, $usuarioId) {
         $sql = "UPDATE subtareas SET usuarioasignado_id = ? WHERE id = ?";
         $stmt = $this->db->prepare($sql);
         return $stmt->execute([$usuarioId, $subtareaId]);
     }
     
-    /**
-     * Obtener subtareas por usuario
-     */
     public function getSubtareasByUsuario($usuarioId, $fecha = null) {
         $sql = "
             SELECT 

@@ -1,6 +1,4 @@
 <?php
-// api/config/DB.php
-
 class DB
 {
     public $dbh; 
@@ -9,7 +7,6 @@ class DB
     private function __construct()
     {
         try {
-            // Leemos del .env usando getenv()
             $host = getenv('DB_HOST');
             $dbName = getenv('DB_NAME');
             $port = getenv('DB_PORT');
@@ -28,11 +25,8 @@ class DB
             ));
 
         } catch (Exception $er) {
-            // En producción nunca mostramos el error real de la BD
-            // Registrar error para debugging
             error_log("DB Connection Error: " . $er->getMessage());
             
-            // Devolver respuesta JSON válida
             header('Content-Type: application/json; charset=utf-8');
             http_response_code(500);
             echo json_encode([

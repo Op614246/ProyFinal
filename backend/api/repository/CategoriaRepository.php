@@ -1,10 +1,4 @@
 <?php
-/**
- * CategoriaRepository.php
- * 
- * Repositorio para operaciones de categorías
- */
-
 class CategoriaRepository
 {
     private $db;
@@ -14,11 +8,6 @@ class CategoriaRepository
         $this->db = DB::getInstance()->dbh;
     }
 
-    /**
-     * Obtiene todas las categorías activas
-     * 
-     * @return array Lista de categorías
-     */
     public function getAll(): array
     {
         $sql = "SELECT id, nombre, descripcion, color, created_at 
@@ -32,12 +21,6 @@ class CategoriaRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Obtiene una categoría por ID
-     * 
-     * @param int $id ID de la categoría
-     * @return array|false Datos de la categoría o false si no existe
-     */
     public function getById(int $id)
     {
         $sql = "SELECT id, nombre, descripcion, color, activo, created_at 
@@ -51,12 +34,6 @@ class CategoriaRepository
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Crea una nueva categoría
-     * 
-     * @param array $data Datos de la categoría
-     * @return int|false ID de la categoría creada o false si falla
-     */
     public function create(array $data)
     {
         $sql = "INSERT INTO categorias (nombre, descripcion, color, activo, created_at) 
@@ -72,13 +49,6 @@ class CategoriaRepository
         return $result ? (int)$this->db->lastInsertId() : false;
     }
 
-    /**
-     * Actualiza una categoría existente
-     * 
-     * @param int $id ID de la categoría
-     * @param array $data Datos a actualizar
-     * @return bool
-     */
     public function update(int $id, array $data): bool
     {
         $fields = [];
@@ -103,12 +73,6 @@ class CategoriaRepository
         return $stmt->execute($params);
     }
 
-    /**
-     * Desactiva una categoría (soft delete)
-     * 
-     * @param int $id ID de la categoría
-     * @return bool
-     */
     public function delete(int $id): bool
     {
         $sql = "UPDATE categorias SET activo = 0 WHERE id = :id";
@@ -116,13 +80,6 @@ class CategoriaRepository
         return $stmt->execute([':id' => $id]);
     }
 
-    /**
-     * Verifica si existe una categoría con el nombre dado
-     * 
-     * @param string $nombre Nombre de la categoría
-     * @param int|null $excludeId ID a excluir de la búsqueda (para updates)
-     * @return bool
-     */
     public function existsByName(string $nombre, ?int $excludeId = null): bool
     {
         $sql = "SELECT COUNT(*) FROM categorias WHERE nombre = :nombre AND activo = 1";
@@ -139,12 +96,6 @@ class CategoriaRepository
         return (int)$stmt->fetchColumn() > 0;
     }
 
-    /**
-     * Cuenta el número de tareas asociadas a una categoría
-     * 
-     * @param int $id ID de la categoría
-     * @return int
-     */
     public function countTasks(int $id): int
     {
         $sql = "SELECT COUNT(*) FROM tasks WHERE categoria_id = :id";

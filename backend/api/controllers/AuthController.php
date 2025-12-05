@@ -1,14 +1,4 @@
 <?php
-/**
- * AuthController.php
- * 
- * Controlador de autenticación con:
- * - Encriptación AES-256 de datos en tránsito
- * - Sistema de bloqueo escalonado (5min -> 10min -> permanente)
- * - Mensajes personalizados por rol
- * - Logging con Monolog
- */
-
 require_once __DIR__ . '/../core/Logger.php';
 require_once __DIR__ . '/../../smart/validators/AuthValidator.php';
 
@@ -20,11 +10,10 @@ class AuthController {
     private $encryptionKey;
     private $jwtSecret;
 
-    // Constantes de configuración de bloqueo
-    const LOCKOUT_WINDOW = 120;        // 2 minutos en segundos (ventana para acumular intentos)
-    const FIRST_LOCKOUT_MINUTES = 5;   // Primer bloqueo: 5 minutos
-    const SECOND_LOCKOUT_MINUTES = 10; // Segundo bloqueo: 10 minutos
-    const ATTEMPTS_PER_LEVEL = 3;      // Intentos antes de cada nivel de bloqueo
+    const LOCKOUT_WINDOW = 120;
+    const FIRST_LOCKOUT_MINUTES = 5;
+    const SECOND_LOCKOUT_MINUTES = 10;
+    const ATTEMPTS_PER_LEVEL = 3;
 
     public function __construct($app) {
         $this->app = $app;
@@ -34,12 +23,8 @@ class AuthController {
         $this->jwtSecret = getenv('JWT_SECRET');
     }
 
-    /**
-     * Proceso de login con datos encriptados
-     */
     public function login() {
         try {
-            // 1. Obtener y validar datos encriptados
             $encryptedData = $this->getEncryptedRequest();
             
             if (!$encryptedData) {
@@ -49,7 +34,6 @@ class AuthController {
                 return $this->sendResponse($this->validator->invalidRequestFormat());
             }
 
-            // 2. Desencriptar los datos
             $credentials = $this->decryptCredentials($encryptedData);
             
             if (!$credentials) {
@@ -59,7 +43,6 @@ class AuthController {
                 return $this->sendResponse($this->validator->decryptionError());
             }
 
-            // 3. Validar credenciales
             if (!isset($credentials['username']) || !isset($credentials['password'])) {
                 return $this->sendResponse($this->validator->incompleteCredentials());
             }
@@ -71,25 +54,21 @@ class AuthController {
                 return $this->sendResponse($this->validator->emptyFields());
             }
 
-            // 4. Buscar usuario
             $user = $this->repository->obtenerUsuarioPorUsername($username);
 
             if (!$user) {
                 return $this->sendResponse($this->validator->invalidCredentials());
             }
 
-            // 5. Verificar bloqueo permanente
             if ($user['is_permanently_locked']) {
                 return $this->sendResponse($this->validator->permanentlyLocked());
             }
 
-            // 6. Verificar bloqueo temporal
             $lockCheck = $this->checkTemporaryLock($user, $username);
             if ($lockCheck) {
                 return $this->sendResponse($lockCheck);
             }
 
-            // 7. Verificar contraseña
             if (password_verify($password, $user['password_hash'])) {
                 return $this->handleSuccessfulLogin($user, $username);
             } else {
@@ -107,9 +86,6 @@ class AuthController {
         }
     }
 
-    /**
-     * Registrar nuevo usuario (solo para admins)
-     */
     public function register() {
         try {
             $userData = $this->getAuthenticatedUser();
@@ -161,9 +137,6 @@ class AuthController {
         }
     }
 
-    /**
-     * Desbloquear cuenta (solo para admins)
-     */
     public function unlockAccount() {
         try {
             $userData = $this->getAuthenticatedUser();
@@ -205,9 +178,6 @@ class AuthController {
         }
     }
 
-    /**
-     * Verificar estado de sesión
-     */
     public function checkStatus() {
         try {
             $userData = $this->getAuthenticatedUser();
@@ -228,9 +198,6 @@ class AuthController {
         }
     }
 
-    /**
-     * Cerrar sesión (logout)
-     */
     public function logout() {
         try {
             $userData = $this->getAuthenticatedUser();
@@ -261,9 +228,6 @@ class AuthController {
         }
     }
 
-    /**
-     * Cerrar todas las sesiones del usuario
-     */
     public function logoutAll() {
         try {
             $userData = $this->getAuthenticatedUser();
@@ -291,9 +255,6 @@ class AuthController {
         }
     }
 
-    /**
-     * Obtiene todos los usuarios (solo para admins)
-     */
     public function getAllUsers() {
         try {
             $userData = $this->getAuthenticatedUser();
@@ -330,9 +291,6 @@ class AuthController {
         }
     }
 
-    /**
-     * Activa o desactiva permanentemente un usuario (solo para admins)
-     */
     public function toggleUserStatus($userId) {
         try {
             $userData = $this->getAuthenticatedUser();
@@ -374,9 +332,6 @@ class AuthController {
         }
     }
 
-    /**
-     * Elimina un usuario (solo para admins)
-     */
     public function deleteUser($userId) {
         try {
             $userData = $this->getAuthenticatedUser();
@@ -413,13 +368,6 @@ class AuthController {
         }
     }
 
-    // ============================================================
-    // MÉTODOS PRIVADOS DE APOYO
-    // ============================================================
-
-    /**
-     * Obtiene datos encriptados del request
-     */
     private function getEncryptedRequest(): ?array {
         $requestBody = $this->app->request()->getBody();
         $encryptedData = json_decode($requestBody, true);
@@ -431,9 +379,6 @@ class AuthController {
         return $encryptedData;
     }
 
-    /**
-     * Desencripta las credenciales
-     */
     private function decryptCredentials(array $encryptedData): ?array {
         $decryptedData = $this->decryptData($encryptedData['payload'], $encryptedData['iv']);
         
@@ -444,9 +389,6 @@ class AuthController {
         return json_decode($decryptedData, true);
     }
 
-    /**
-     * Verifica si hay bloqueo temporal activo
-     */
     private function checkTemporaryLock(array $user, string $username): ?array {
         if (!$user['lockout_until']) {
             return null;
@@ -471,9 +413,6 @@ class AuthController {
         return null;
     }
 
-    /**
-     * Maneja un login exitoso
-     */
     private function handleSuccessfulLogin(array $user, string $username) {
         $this->repository->limpiarIntentos($user['id']);
 
@@ -508,9 +447,6 @@ class AuthController {
         return $this->sendResponse($response);
     }
 
-    /**
-     * Extrae el token del header Authorization
-     */
     private function extractToken(): ?string {
         $authHeader = $this->app->request()->headers('Authorization');
         if (!$authHeader) {
@@ -524,16 +460,10 @@ class AuthController {
         return null;
     }
 
-    /**
-     * Obtiene el usuario autenticado desde el middleware JWT
-     */
     private function getAuthenticatedUser(): ?array {
         return isset($this->app->user) ? $this->app->user : null;
     }
 
-    /**
-     * Procesa los intentos fallidos con el sistema de bloqueo escalonado
-     */
     private function procesarFallo($user) {
         $currentFailures = (int)$user['failed_attempts'];
         
@@ -552,7 +482,6 @@ class AuthController {
         $lockoutTime = null;
         $permanentLock = 0;
 
-        // Determinar si reiniciamos el contador
         $resetCounter = false;
         if ($user['last_attempt_time']) {
             if ($secondsSinceLastAttempt > self::LOCKOUT_WINDOW && !$user['lockout_until']) {
@@ -574,7 +503,6 @@ class AuthController {
 
         $response = null;
 
-        // Aplicar bloqueo según el nivel alcanzado
         if ($newFailures % self::ATTEMPTS_PER_LEVEL === 0) {
             switch ($blockLevel) {
                 case 1:
@@ -609,9 +537,6 @@ class AuthController {
         return $this->sendResponse($response);
     }
 
-    /**
-     * Genera un token JWT con username específico
-     */
     private function generateJWTWithUsername($user, $username): string {
         $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
         $payload = json_encode([
@@ -633,9 +558,6 @@ class AuthController {
         return $base64UrlHeader . "." . $base64UrlPayload . "." . $base64UrlSignature;
     }
 
-    /**
-     * Encripta datos usando AES-256-CBC
-     */
     private function encryptData($data): array {
         $key = hash('sha256', $this->encryptionKey, true);
         $iv = openssl_random_pseudo_bytes(16);
@@ -648,9 +570,6 @@ class AuthController {
         ];
     }
 
-    /**
-     * Desencripta datos usando AES-256-CBC
-     */
     private function decryptData($encryptedPayload, $iv): ?string {
         try {
             $key = hash('sha256', $this->encryptionKey, true);
@@ -665,24 +584,15 @@ class AuthController {
         }
     }
 
-    /**
-     * Codifica en Base64 URL-safe
-     */
     private function base64UrlEncode($data): string {
         return str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($data));
     }
 
-    /**
-     * Decodifica Base64 URL-safe
-     */
     private function base64UrlDecode($data): string {
         $base64 = str_replace(['-', '_'], ['+', '/'], $data);
         return base64_decode($base64);
     }
 
-    /**
-     * Envía la respuesta JSON
-     */
     private function sendResponse(array $responseData): void {
         $response = $this->app->response();
         $response->header('Content-Type', 'application/json');

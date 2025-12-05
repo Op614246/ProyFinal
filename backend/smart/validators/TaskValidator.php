@@ -1,33 +1,15 @@
 <?php
-/**
- * TaskValidator.php
- * 
- * Validador y generador de respuestas para el módulo de tareas.
- * Agrupa todas las validaciones y mensajes de respuesta.
- */
-
 class TaskValidator
 {
     private $errors = [];
 
-    // Constantes de validación
     const MAX_IMAGE_SIZE = 1572864; // 1.5 MB en bytes
     const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png'];
-    const VALID_STATUSES = ['pending', 'in_process', 'completed', 'incomplete', 'inactive', 'closed'];
-    const VALID_PRIORITIES = ['high', 'medium', 'low'];
 
-    // ============================================================
-    // SECCIÓN: VALIDACIONES DE ENTRADA
-    // ============================================================
-
-    /**
-     * Valida los datos para crear una tarea
-     */
     public function validateCreate(array $data): bool
     {
         $this->errors = [];
 
-        // Título requerido y validado
         if (!isset($data['title']) || empty(trim($data['title']))) {
             $this->errors[] = "El título de la tarea es requerido.";
         } else {
@@ -40,7 +22,6 @@ class TaskValidator
             }
         }
 
-        // Descripción opcional pero con límite (validar solo si existe)
         if (isset($data['description']) && !empty($data['description'])) {
             $description = is_string($data['description']) ? $data['description'] : '';
             if (strlen($description) > 1000) {
@@ -48,14 +29,12 @@ class TaskValidator
             }
         }
 
-        // Prioridad requerida y válida
         if (!isset($data['priority']) || empty($data['priority'])) {
             $this->errors[] = "La prioridad es requerida.";
-        } elseif (!in_array($data['priority'], self::VALID_PRIORITIES, true)) {
+        } elseif (!in_array($data['priority'], TaskConfig::PRIORITIES, true)) {
             $this->errors[] = "La prioridad debe ser 'high', 'medium' o 'low'.";
         }
 
-        // Deadline opcional pero formato válido
         if (isset($data['deadline']) && !empty($data['deadline'])) {
             $deadline = is_string($data['deadline']) ? trim($data['deadline']) : '';
             if (!$this->isValidDate($deadline)) {
@@ -63,7 +42,6 @@ class TaskValidator
             }
         }
 
-        // Usuario asignado opcional (ID numérico)
         if (isset($data['assigned_user_id']) && !empty($data['assigned_user_id'])) {
             if (!is_numeric($data['assigned_user_id'])) {
                 $this->errors[] = "El ID de usuario asignado debe ser numérico.";
@@ -73,14 +51,10 @@ class TaskValidator
         return empty($this->errors);
     }
 
-    /**
-     * Valida los datos para asignar una tarea
-     */
     public function validateAssign(array $data): bool
     {
         $this->errors = [];
 
-        // Para reasignación admin, se requiere user_id
         if (isset($data['user_id']) && !empty($data['user_id'])) {
             if (!is_numeric($data['user_id'])) {
                 $this->errors[] = "El ID de usuario debe ser numérico.";
@@ -90,40 +64,32 @@ class TaskValidator
         return empty($this->errors);
     }
 
-    /**
-     * Valida el archivo de imagen para completar tarea
-     */
     public function validateCompletionImage(array $file): bool
     {
         $this->errors = [];
 
-        // Verificar que existe el archivo
         if (!isset($file['tmp_name']) || empty($file['tmp_name'])) {
             $this->errors[] = "La imagen de evidencia es requerida para completar la tarea.";
             return false;
         }
 
-        // Verificar que el archivo se subió sin errores
         if (!isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK) {
             $errorCode = $file['error'] ?? UPLOAD_ERR_NO_FILE;
             $this->errors[] = $this->getUploadErrorMessage($errorCode);
             return false;
         }
 
-        // Verificar que existe el archivo temporal
         if (!is_uploaded_file($file['tmp_name'])) {
             $this->errors[] = "El archivo no es una subida válida.";
             return false;
         }
 
-        // Validar tamaño (máximo 1.5 MB)
         $fileSize = filesize($file['tmp_name']);
         if ($fileSize === false || $fileSize > self::MAX_IMAGE_SIZE) {
             $sizeMB = number_format(self::MAX_IMAGE_SIZE / 1048576, 1);
             $this->errors[] = "La imagen no puede exceder {$sizeMB} MB.";
         }
 
-        // Validar tipo MIME real (no confiar en extensión ni en file['type'])
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $mimeType = finfo_file($finfo, $file['tmp_name']);
         finfo_close($finfo);
@@ -135,34 +101,24 @@ class TaskValidator
         return empty($this->errors);
     }
 
-    /**
-     * Valida que una fecha tenga formato correcto (YYYY-MM-DD)
-     */
     private function isValidDate(string $date): bool
     {
-        // Verificar longitud
         if (strlen($date) !== 10) {
             return false;
         }
 
-        // Verificar formato básico YYYY-MM-DD
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
             return false;
         }
 
-        // Separar componentes
         $parts = explode('-', $date);
         $year = (int)$parts[0];
         $month = (int)$parts[1];
         $day = (int)$parts[2];
 
-        // Validar que sea una fecha válida usando checkdate
         return checkdate($month, $day, $year);
     }
 
-    /**
-     * Obtiene mensaje de error de subida de archivo
-     */
     private function getUploadErrorMessage(int $errorCode): string
     {
         $errors = [
@@ -178,13 +134,6 @@ class TaskValidator
         return $errors[$errorCode] ?? "Error desconocido al subir el archivo.";
     }
 
-    // ============================================================
-    // SECCIÓN: RESPUESTAS DE LISTADO
-    // ============================================================
-
-    /**
-     * Respuesta de lista obtenida exitosamente
-     */
     public function listSuccess(int $count): array
     {
         return [
@@ -193,9 +142,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Respuesta de lista vacía
-     */
     public function listEmpty(): array
     {
         return [
@@ -204,9 +150,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Error al obtener lista
-     */
     public function listError(): array
     {
         return [
@@ -215,13 +158,6 @@ class TaskValidator
         ];
     }
 
-    // ============================================================
-    // SECCIÓN: RESPUESTAS DE CREACIÓN
-    // ============================================================
-
-    /**
-     * Tarea creada exitosamente
-     */
     public function createSuccess(string $title): array
     {
         return [
@@ -230,9 +166,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Error al crear tarea
-     */
     public function createError(): array
     {
         return [
@@ -241,9 +174,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Datos de creación inválidos
-     */
     public function createValidationError(): array
     {
         return [
@@ -252,13 +182,6 @@ class TaskValidator
         ];
     }
 
-    // ============================================================
-    // SECCIÓN: RESPUESTAS DE ASIGNACIÓN
-    // ============================================================
-
-    /**
-     * Tarea asignada exitosamente
-     */
     public function assignSuccess(string $username): array
     {
         return [
@@ -267,9 +190,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Auto-asignación exitosa
-     */
     public function selfAssignSuccess(): array
     {
         return [
@@ -278,9 +198,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Error: tarea ya asignada
-     */
     public function alreadyAssigned(): array
     {
         return [
@@ -289,9 +206,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Error: tarea no encontrada
-     */
     public function taskNotFound(): array
     {
         return [
@@ -300,9 +214,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Error: usuario no encontrado
-     */
     public function userNotFound(): array
     {
         return [
@@ -311,9 +222,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Error al asignar
-     */
     public function assignError(): array
     {
         return [
@@ -322,13 +230,6 @@ class TaskValidator
         ];
     }
 
-    // ============================================================
-    // SECCIÓN: RESPUESTAS DE COMPLETAR TAREA
-    // ============================================================
-
-    /**
-     * Tarea completada exitosamente
-     */
     public function completeSuccess(): array
     {
         return [
@@ -337,9 +238,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Error: tarea no asignada al usuario
-     */
     public function notAssignedToYou(): array
     {
         return [
@@ -348,9 +246,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Error: tarea ya completada
-     */
     public function alreadyCompleted(): array
     {
         return [
@@ -359,9 +254,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Error: estado no permite completar
-     */
     public function cannotComplete(): array
     {
         return [
@@ -370,9 +262,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Error de validación de imagen
-     */
     public function imageValidationError(): array
     {
         return [
@@ -381,9 +270,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Error al subir imagen
-     */
     public function imageUploadError(): array
     {
         return [
@@ -392,9 +278,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Error al completar tarea
-     */
     public function completeError(): array
     {
         return [
@@ -403,13 +286,6 @@ class TaskValidator
         ];
     }
 
-    // ============================================================
-    // SECCIÓN: RESPUESTAS DE PERMISOS
-    // ============================================================
-
-    /**
-     * Solo admin puede realizar la acción
-     */
     public function adminRequired(): array
     {
         return [
@@ -418,9 +294,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Permiso denegado genérico
-     */
     public function permissionDenied(): array
     {
         return [
@@ -429,9 +302,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Sesión inválida
-     */
     public function invalidSession(): array
     {
         return [
@@ -440,13 +310,6 @@ class TaskValidator
         ];
     }
 
-    // ============================================================
-    // SECCIÓN: RESPUESTAS DE ACTUALIZACIÓN DE ESTADO
-    // ============================================================
-
-    /**
-     * Estado actualizado exitosamente
-     */
     public function statusUpdateSuccess(string $newStatus): array
     {
         $statusLabels = [
@@ -458,28 +321,22 @@ class TaskValidator
             'closed' => 'Cerrada'
         ];
         $label = $statusLabels[$newStatus] ?? $newStatus;
-        
+
         return [
             'tipo' => 1,
             'mensajes' => ["Estado de tarea actualizado a '{$label}'."]
         ];
     }
 
-    /**
-     * Error: estado inválido
-     */
     public function invalidStatus(): array
     {
-        $validStatuses = implode(', ', self::VALID_STATUSES);
+        $validStatuses = implode(', ', TaskConfig::STATUSES);
         return [
             'tipo' => 3,
             'mensajes' => ["Estado inválido. Los estados válidos son: {$validStatuses}."]
         ];
     }
 
-    /**
-     * Error al actualizar estado
-     */
     public function statusUpdateError(): array
     {
         return [
@@ -488,21 +345,29 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Valida que el estado sea válido
-     */
     public function validateStatus(string $status): bool
     {
-        return in_array($status, self::VALID_STATUSES);
+        return in_array($status, TaskConfig::STATUSES);
     }
 
-    // ============================================================
-    // SECCIÓN: RESPUESTAS DE ELIMINACIÓN
-    // ============================================================
+    public static function validateDeadlineAfterOrEqual(string $fechaAsignacion, string $deadline, ?string &$error = null): bool
+    {
+        try {
+            $fa = new DateTime($fechaAsignacion);
+            $dl = new DateTime($deadline);
+        } catch (Exception $e) {
+            $error = 'Formato de fecha inválido.';
+            return false;
+        }
 
-    /**
-     * Tarea eliminada exitosamente
-     */
+        if ($dl < $fa) {
+            $error = 'El plazo (deadline) no puede ser anterior a la fecha de asignación.';
+            return false;
+        }
+
+        return true;
+    }
+
     public function deleteSuccess(): array
     {
         return [
@@ -511,9 +376,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Error al eliminar tarea
-     */
     public function deleteError(): array
     {
         return [
@@ -522,9 +384,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * No se puede eliminar tarea completada
-     */
     public function cannotDeleteCompleted(): array
     {
         return [
@@ -533,13 +392,6 @@ class TaskValidator
         ];
     }
 
-    // ============================================================
-    // SECCIÓN: RESPUESTAS GENÉRICAS
-    // ============================================================
-
-    /**
-     * Error interno del servidor
-     */
     public function serverError(): array
     {
         return [
@@ -548,9 +400,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Formato de petición inválido
-     */
     public function invalidRequestFormat(): array
     {
         return [
@@ -559,9 +408,6 @@ class TaskValidator
         ];
     }
 
-    /**
-     * Datos incompletos
-     */
     public function incompleteData(): array
     {
         return [
@@ -570,13 +416,6 @@ class TaskValidator
         ];
     }
 
-    // ============================================================
-    // SECCIÓN: UTILIDADES
-    // ============================================================
-
-    /**
-     * Sanitiza un string para prevenir XSS
-     */
     public function sanitize($input)
     {
         if (is_string($input)) {
@@ -585,33 +424,21 @@ class TaskValidator
         return $input;
     }
 
-    /**
-     * Obtiene los errores de validación
-     */
     public function getErrors(): array
     {
         return $this->errors;
     }
 
-    /**
-     * Verifica si hay errores
-     */
     public function hasErrors(): bool
     {
         return !empty($this->errors);
     }
 
-    /**
-     * Agrega un error manualmente
-     */
     public function addError(string $error): void
     {
         $this->errors[] = $error;
     }
-
-    /**
-     * Limpia los errores
-     */
+    
     public function clearErrors(): void
     {
         $this->errors = [];

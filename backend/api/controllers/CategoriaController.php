@@ -1,10 +1,4 @@
 <?php
-/**
- * CategoriaController.php
- * 
- * Controlador para gestión de categorías
- */
-
 require_once __DIR__ . '/../core/Logger.php';
 require_once __DIR__ . '/../core/CryptoHelper.php';
 
@@ -21,10 +15,6 @@ class CategoriaController
         $this->encryptionKey = getenv('ENCRYPTION_KEY');
     }
 
-    /**
-     * GET /
-     * Listar todas las categorías activas
-     */
     public function getAll()
     {
         try {
@@ -57,10 +47,6 @@ class CategoriaController
         }
     }
 
-    /**
-     * GET /:id
-     * Obtener una categoría por ID
-     */
     public function getById($id)
     {
         try {
@@ -100,10 +86,6 @@ class CategoriaController
         }
     }
 
-    /**
-     * POST /
-     * Crear nueva categoría (Solo Admin)
-     */
     public function create()
     {
         try {
@@ -132,7 +114,6 @@ class CategoriaController
                 ]);
             }
 
-            // Validaciones
             if (empty($data['nombre'])) {
                 return $this->sendResponse([
                     'tipo' => 0,
@@ -179,10 +160,6 @@ class CategoriaController
         }
     }
 
-    /**
-     * PUT /:id
-     * Actualizar categoría (Solo Admin)
-     */
     public function update($id)
     {
         try {
@@ -220,7 +197,6 @@ class CategoriaController
                 ]);
             }
 
-            // Validar nombre único si se está cambiando
             if (!empty($data['nombre']) && $data['nombre'] !== $categoria['nombre']) {
                 if ($this->repository->existsByName($data['nombre'], (int)$id)) {
                     return $this->sendResponse([
@@ -261,10 +237,6 @@ class CategoriaController
         }
     }
 
-    /**
-     * DELETE /:id
-     * Eliminar categoría (Solo Admin)
-     */
     public function delete($id)
     {
         try {
@@ -293,7 +265,6 @@ class CategoriaController
                 ]);
             }
 
-            // Verificar si tiene tareas asociadas
             $taskCount = $this->repository->countTasks((int)$id);
             if ($taskCount > 0) {
                 return $this->sendResponse([
@@ -333,10 +304,6 @@ class CategoriaController
         }
     }
 
-    // ============================================================
-    // MÉTODOS PRIVADOS
-    // ============================================================
-
     private function getAuthenticatedUser(): ?array
     {
         return isset($this->app->user) ? $this->app->user : null;
@@ -351,7 +318,6 @@ class CategoriaController
             return null;
         }
 
-        // Si viene encriptado
         if (isset($requestData['payload']) && $this->encryptionKey) {
             $decrypted = CryptoHelper::decrypt($requestData['payload'], $this->encryptionKey);
             return $decrypted ? json_decode($decrypted, true) : null;

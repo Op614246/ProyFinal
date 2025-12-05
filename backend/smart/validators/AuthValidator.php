@@ -3,10 +3,6 @@ class AuthValidator
 {
     private $errors = [];
 
-    // ============================================================
-    // SECCIÓN: VALIDACIONES DE ENTRADA
-    // ============================================================
-
     public function validateLogin($data): bool
     {
         $this->errors = [];
@@ -132,10 +128,6 @@ class AuthValidator
         return empty($this->errors);
     }
 
-    // ============================================================
-    // SECCIÓN: RESPUESTAS DE LOGIN
-    // ============================================================
-
     public function invalidRequestFormat(): array
     {
         return [
@@ -221,10 +213,6 @@ class AuthValidator
         }
     }
 
-    // ============================================================
-    // SECCIÓN: RESPUESTAS DE BLOQUEO ESCALONADO
-    // ============================================================
-
     public function wrongPassword(int $attemptsRemaining): array
     {
         $mensajes = ["Credenciales incorrectas."];
@@ -274,10 +262,6 @@ class AuthValidator
         ];
     }
 
-    // ============================================================
-    // SECCIÓN: RESPUESTAS DE REGISTRO
-    // ============================================================
-
     public function adminRequired(): array
     {
         return [
@@ -318,10 +302,6 @@ class AuthValidator
         ];
     }
 
-    // ============================================================
-    // SECCIÓN: RESPUESTAS DE DESBLOQUEO
-    // ============================================================
-
     public function unlockUsernameRequired(): array
     {
         return [
@@ -345,10 +325,6 @@ class AuthValidator
             'mensajes' => ["Usuario no encontrado."]
         ];
     }
-
-    // ============================================================
-    // SECCIÓN: RESPUESTAS DE SESIÓN
-    // ============================================================
 
     public function invalidSession(): array
     {
@@ -405,10 +381,6 @@ class AuthValidator
             'mensajes' => ["Error al cerrar sesiones."]
         ];
     }
-
-    // ============================================================
-    // SECCIÓN: RESPUESTAS DE GESTIÓN DE USUARIOS
-    // ============================================================
 
     public function permissionDenied(): array
     {
@@ -491,10 +463,6 @@ class AuthValidator
         ];
     }
 
-    // ============================================================
-    // SECCIÓN: RESPUESTAS GENÉRICAS DE ERROR
-    // ============================================================
-
     public function serverError(): array
     {
         return [
@@ -510,10 +478,6 @@ class AuthValidator
             'mensajes' => ["Error al verificar sesión."]
         ];
     }
-
-    // ============================================================
-    // SECCIÓN: UTILIDADES
-    // ============================================================
 
     public function sanitize($input): mixed
     {

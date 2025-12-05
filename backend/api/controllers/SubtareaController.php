@@ -211,11 +211,7 @@ class SubtareaController {
             ], 500);
         }
     }
-    
-    /**
-     * Actualizar subtarea
-     * PUT /subtareas/:id
-     */
+
     public function actualizarSubtarea($subtareaId) {
         try {
             $subtarea = $this->repository->getSubtareaById($subtareaId);
@@ -257,10 +253,6 @@ class SubtareaController {
         }
     }
     
-    /**
-     * Eliminar subtarea
-     * DELETE /subtareas/:id
-     */
     public function eliminarSubtarea($subtareaId) {
         try {
             $subtarea = $this->repository->getSubtareaById($subtareaId);
@@ -299,10 +291,6 @@ class SubtareaController {
         }
     }
     
-    /**
-     * Completar subtarea
-     * PUT /subtareas/:id/completar
-     */
     public function completarSubtarea($subtareaId) {
         try {
             $subtarea = $this->repository->getSubtareaById($subtareaId);
@@ -345,10 +333,6 @@ class SubtareaController {
         }
     }
     
-    /**
-     * Iniciar subtarea
-     * PUT /subtareas/:id/iniciar
-     */
     public function iniciarSubtarea($subtareaId) {
         try {
             $subtarea = $this->repository->getSubtareaById($subtareaId);
@@ -383,10 +367,6 @@ class SubtareaController {
         }
     }
     
-    /**
-     * Asignar subtarea a usuario
-     * PUT /subtareas/:id/asignar
-     */
     public function asignarSubtarea($subtareaId) {
         try {
             $subtarea = $this->repository->getSubtareaById($subtareaId);
@@ -403,7 +383,6 @@ class SubtareaController {
             $usuarioId = $body['usuarioasignado_id'] ?? null;
             
             if (!$usuarioId) {
-                // Auto-asignar al usuario actual
                 $usuarioId = $this->app->user['data']['id'] ?? null;
             }
             
@@ -437,10 +416,6 @@ class SubtareaController {
         }
     }
     
-    /**
-     * Obtener subtareas del usuario actual
-     * GET /subtareas/mis-subtareas
-     */
     public function getMisSubtareas() {
         try {
             $usuarioId = $this->app->user['data']['id'] ?? null;
@@ -456,12 +431,10 @@ class SubtareaController {
             $fecha = $this->app->request()->get('fecha');
             $subtareas = $this->repository->getSubtareasByUsuario($usuarioId, $fecha);
 
-            // Devolver `data` como array para mantener consistencia con otros endpoints
             $this->sendResponse([
                 'tipo' => 1,
                 'mensajes' => ['Subtareas obtenidas correctamente'],
                 'data' => $subtareas,
-                // Compatibilidad hacia atrás: exponer subtareas también como campo directo
                 'subtareas' => $subtareas,
                 'meta' => [
                     'total' => count($subtareas)

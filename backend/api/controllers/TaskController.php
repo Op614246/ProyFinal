@@ -1,18 +1,7 @@
 <?php
-/**
- * TaskController.php
- * 
- * Controlador UNIFICADO de tareas con:
- * - Soporte para Admin y User
- * - Encriptación AES-256 de datos en tránsito
- * - Validación de archivos para completar tareas
- * - Ordenamiento inteligente para usuarios
- * - Métodos legacy para compatibilidad con frontend admin
- * - Logging con Monolog
- */
-
 require_once __DIR__ . '/../core/Logger.php';
 require_once __DIR__ . '/../../smart/validators/TaskValidator.php';
+require_once __DIR__ . '/../core/TaskConfig.php';
 
 class TaskController
 {
@@ -20,9 +9,6 @@ class TaskController
     private $repository;
     private $validator;
     private $encryptionKey;
-
-    // Constantes movidas a config.php - Solo mantener las que son específicas del controller
-    const DEFAULT_DEADLINE_DAYS = 2;
 
     public function __construct($app)
     {
@@ -32,13 +18,6 @@ class TaskController
         $this->encryptionKey = getenv('ENCRYPTION_KEY');
     }
 
-    // ============================================================
-    // SECCIÓN: HELPERS DE RESPUESTA Y UTILIDADES
-    // ============================================================
-
-    /**
-     * Respuesta de éxito en formato legacy
-     */
     private function success($data, string $mensaje = 'Operación exitosa', int $code = 200)
     {
         return $this->sendLegacyResponse([
@@ -48,9 +27,6 @@ class TaskController
         ], $code);
     }
 
-    /**
-     * Respuesta de error de validación
-     */
     private function validationError(string $mensaje, int $code = 400)
     {
         return $this->sendLegacyResponse([
@@ -60,9 +36,6 @@ class TaskController
         ], $code);
     }
 
-    /**
-     * Respuesta de error del servidor
-     */
     private function serverError(string $mensaje = 'Error interno del servidor')
     {
         return $this->sendLegacyResponse([
@@ -72,25 +45,18 @@ class TaskController
         ], 500);
     }
 
-    /**
-     * Procesar y validar archivos subidos
-     * @return array ['files' => [...], 'error' => null] o ['files' => [], 'error' => 'mensaje']
-     */
     private function processUploadedFiles(): array
     {
         $filesToProcess = [];
-        
-        // Crear directorio si no existe
-        if (!is_dir(UPLOAD_DIR)) {
-            mkdir(UPLOAD_DIR, 0755, true);
+
+        if (!is_dir(TaskConfig::UPLOAD_DIR)) {
+            mkdir(TaskConfig::UPLOAD_DIR, 0755, true);
         }
-        
-        // Caso 1: Campo único 'evidence'
+
         if (isset($_FILES['evidence']) && $_FILES['evidence']['error'] === UPLOAD_ERR_OK) {
             $filesToProcess[] = $_FILES['evidence'];
         }
-        
-        // Caso 2: Campo múltiple 'evidences[]'
+
         if (isset($_FILES['evidences']) && is_array($_FILES['evidences']['name'])) {
             $count = count($_FILES['evidences']['name']);
             for ($i = 0; $i < $count; $i++) {
@@ -105,41 +71,36 @@ class TaskController
                 }
             }
         }
-        
+
         $savedFiles = [];
-        
+
         foreach ($filesToProcess as $file) {
-            // Validar tamaño
-            if ($file['size'] > MAX_FILE_SIZE_BYTES) {
+            if ($file['size'] > TaskConfig::MAX_FILE_SIZE_BYTES) {
                 return ['files' => [], 'error' => "El archivo '{$file['name']}' excede el tamaño máximo de 1.5MB"];
             }
-            
-            // Validar tipo
-            if (!in_array($file['type'], ALLOWED_IMAGE_TYPES)) {
+
+            if (!TaskConfig::isAllowedMimeType($file['type'])) {
                 return ['files' => [], 'error' => 'Solo se permiten imágenes (JPEG, PNG, WebP)'];
             }
-            
+
             $savedFiles[] = $file;
         }
-        
+
         return ['files' => $savedFiles, 'error' => null];
     }
 
-    /**
-     * Guardar archivo en disco y retornar información
-     */
     private function saveFileToDisk(array $file, int $taskId, int $userId): ?array
     {
         $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
         $uniqueId = uniqid();
         $fileName = "tarea_{$taskId}_u{$userId}_{$uniqueId}.{$extension}";
-        $filePath = UPLOAD_PATH_RELATIVE . $fileName;
-        $fullPath = UPLOAD_DIR . $fileName;
-        
+        $filePath = TaskConfig::UPLOAD_PATH_RELATIVE . $fileName;
+        $fullPath = TaskConfig::UPLOAD_DIR . $fileName;
+
         if (!move_uploaded_file($file['tmp_name'], $fullPath)) {
             return null;
         }
-        
+
         return [
             'path' => $filePath,
             'name' => $file['name'],
@@ -148,20 +109,11 @@ class TaskController
         ];
     }
 
-    // ============================================================
-    // SECCIÓN: MÉTODOS ADMIN (Formato Legacy)
-    // ============================================================
-
-    /**
-     * GET /admin/tareas
-     * Obtener todas las tareas admin con filtros opcionales
-     * Query params: fecha, status, sucursal_id, categoria_id, assigned_user_id, sin_asignar
-     */
     public function getAllTareasAdmin()
     {
         try {
             $request = $this->app->request();
-            
+
             // Construir filtros desde query params
             $filtros = array_filter([
                 'fecha' => $request->get('fecha'),
@@ -170,11 +122,12 @@ class TaskController
                 'categoria_id' => $request->get('categoria_id'),
                 'assigned_user_id' => $request->get('assigned_user_id'),
                 'sin_asignar' => $request->get('sin_asignar') === 'true' ? true : null
-            ], function($v) { return $v !== null; });
-            
-            // Obtener tareas con filtros (auto-inactiva vencidas)
+            ], function ($v) {
+                return $v !== null;
+            });
+
             $tareas = $this->repository->getTareasConFiltros($filtros);
-            
+
             return $this->success([
                 "tareas" => $tareas,
                 "total" => count($tareas),
@@ -186,19 +139,15 @@ class TaskController
         }
     }
 
-    /**
-     * GET /admin/tareas/:id
-     * Obtener tarea específica (formato legacy)
-     */
     public function getTareaAdminById($taskId)
     {
         try {
             $tarea = $this->repository->getTareaById((int)$taskId);
-            
+
             if (!$tarea) {
                 return $this->validationError('Tarea no encontrada', 404);
             }
-            
+
             return $this->success($tarea, 'Tarea obtenida correctamente');
         } catch (Exception $e) {
             Logger::error('Error al obtener tarea', ['error' => $e->getMessage()]);
@@ -206,15 +155,11 @@ class TaskController
         }
     }
 
-    /**
-     * GET /admin/tareas/fecha/:fecha
-     * Obtener tareas por fecha (formato legacy)
-     */
     public function getTareasAdminPorFecha($fecha)
     {
         try {
             $tareas = $this->repository->getTareasConFiltros(['fecha' => $fecha]);
-            
+
             return $this->success([
                 "tareas" => $tareas,
                 "fecha" => $fecha,
@@ -225,26 +170,21 @@ class TaskController
             return $this->serverError('Error al obtener tareas');
         }
     }
-
-    /**
-     * POST /admin/tareas
-     * Crear nueva tarea (formato legacy sin encriptación)
-     */
     public function createTareaAdmin()
     {
         try {
             $userData = $this->getAuthenticatedUser();
             $userId = $userData['id'] ?? null;
-            
+
             $data = json_decode($this->app->request()->getBody(), true);
-            
+
             if (empty($data['titulo'])) {
                 return $this->validationError('El título es requerido');
             }
-            
+
             $taskId = $this->repository->crearTareaAdmin($data, $userId);
             $tarea = $this->repository->getTareaById($taskId);
-            
+
             Logger::info('Tarea creada', ['id' => $taskId, 'user_id' => $userId]);
             return $this->success($tarea, 'Tarea creada correctamente', 201);
         } catch (Exception $e) {
@@ -253,18 +193,14 @@ class TaskController
         }
     }
 
-    /**
-     * PUT /admin/tareas/:id
-     * Actualizar tarea (formato legacy)
-     */
     public function updateTareaAdmin($taskId)
     {
         try {
             $data = json_decode($this->app->request()->getBody(), true);
-            
+
             $this->repository->actualizarTareaAdmin((int)$taskId, $data);
             $tarea = $this->repository->getTareaById((int)$taskId);
-            
+
             Logger::info('Tarea actualizada', ['id' => $taskId]);
             return $this->success($tarea, 'Tarea actualizada correctamente');
         } catch (Exception $e) {
@@ -273,45 +209,46 @@ class TaskController
         }
     }
 
-    /**
-     * DELETE /admin/tareas/:id
-     * Eliminar tarea (formato legacy - hard delete)
-     */
     public function deleteTareaAdmin($taskId)
     {
         try {
-            $this->repository->eliminarTareaAdmin((int)$taskId);
-            
-            Logger::info('Tarea eliminada', ['id' => $taskId]);
-            return $this->success(['id' => $taskId], 'Tarea eliminada correctamente');
+            $user = $this->getAuthenticatedUser();
+            $userId = $user['id'] ?? $user['user_id'] ?? null;
+
+            if (!$userId) {
+                return $this->validationError('Usuario no autenticado', 401);
+            }
+
+            $result = $this->repository->delete((int)$taskId, (int)$userId);
+
+            if ($result) {
+                Logger::info('Tarea eliminada (soft)', ['id' => (int)$taskId, 'deleted_by' => (int)$userId]);
+                return $this->success(['id' => (int)$taskId], 'Tarea eliminada correctamente');
+            }
+
+            return $this->validationError('No se pudo eliminar la tarea', 400);
         } catch (Exception $e) {
             Logger::error('Error al eliminar tarea', ['error' => $e->getMessage()]);
             return $this->serverError('Error al eliminar tarea');
         }
     }
 
-    /**
-     * POST /admin/tareas/:id/asignar
-     * Auto-asignar tarea al usuario autenticado
-     */
     public function asignarTareaAdmin($taskId)
     {
         try {
             $user = $this->getAuthenticatedUser();
             $userId = $user['id'] ?? $user['user_id'] ?? null;
-            
+
             if (!$userId) {
                 return $this->validationError('Usuario no autenticado', 401);
             }
 
             $taskId = (int)$taskId;
 
-            // Verificar que la tarea puede ser asignada
             if (!$this->repository->canBeAssigned($taskId)) {
                 return $this->validationError('Esta tarea no está disponible para asignación');
             }
-            
-            // Validar que solo se pueden asignar tareas del día actual
+
             $tarea = $this->repository->getTareaById($taskId);
             if ($tarea) {
                 $fechaTarea = $tarea['fechaAsignacion'];
@@ -321,8 +258,8 @@ class TaskController
                 }
             }
 
-            $this->repository->asignarTarea($taskId, $userId);
-            
+            $this->repository->assign($taskId, $userId, $userId);
+
             Logger::info('Tarea asignada', ['tareaId' => $taskId, 'userId' => $userId]);
             return $this->success(['tareaId' => $taskId, 'userId' => $userId], 'Tarea asignada correctamente');
         } catch (Exception $e) {
@@ -330,17 +267,11 @@ class TaskController
             return $this->serverError('Error al asignar tarea');
         }
     }
-
-    /**
-     * PUT /admin/tareas/:id/iniciar
-     * Iniciar tarea (cambiar a 'En progreso')
-     */
     public function iniciarTareaAdmin($taskId)
     {
         try {
             $taskId = (int)$taskId;
-            
-            // Validar que no se puede iniciar tareas de días anteriores
+
             $tarea = $this->repository->getTareaById($taskId);
             if ($tarea) {
                 $fechaTarea = $tarea['fechaAsignacion'];
@@ -349,10 +280,10 @@ class TaskController
                     return $this->validationError('No puedes iniciar tareas de días anteriores');
                 }
             }
-            
+
             $this->repository->iniciarTarea($taskId);
             $tarea = $this->repository->getTareaById($taskId);
-            
+
             Logger::info('Tarea iniciada', ['id' => $taskId]);
             return $this->success($tarea, 'Tarea iniciada correctamente');
         } catch (Exception $e) {
@@ -361,27 +292,20 @@ class TaskController
         }
     }
 
-    /**
-     * POST /admin/tareas/:id/completar
-     * Completar tarea con observaciones y evidencias (soporta múltiples imágenes)
-     */
     public function completarTareaAdmin($taskId)
     {
         try {
             $taskId = (int)$taskId;
             $observaciones = $this->app->request()->post('observaciones') ?? '';
-            
-            // Obtener usuario autenticado
+
             $user = $this->getAuthenticatedUser();
             $userId = $user['id'] ?? $user['user_id'] ?? null;
-            
-            // Procesar archivos subidos
+
             $uploadResult = $this->processUploadedFiles();
             if ($uploadResult['error']) {
                 return $this->validationError($uploadResult['error']);
             }
-            
-            // Guardar cada archivo en disco
+
             $imagenesGuardadas = [];
             foreach ($uploadResult['files'] as $file) {
                 $savedFile = $this->saveFileToDisk($file, $taskId, $userId);
@@ -390,49 +314,40 @@ class TaskController
                 }
                 $imagenesGuardadas[] = $savedFile;
             }
-            
-            // Registrar evidencias en BD
+
             if ($userId && !empty($imagenesGuardadas)) {
                 $this->repository->guardarEvidencias($taskId, $userId, $imagenesGuardadas, $observaciones);
             }
-            
-            // Completar la tarea
+
             $this->repository->completarTarea($taskId, $observaciones);
             $tarea = $this->repository->getTareaById($taskId);
-            
+
             $tarea['imagenes_guardadas'] = count($imagenesGuardadas);
-            
+
             Logger::info('Tarea completada', ['id' => $taskId, 'imagenes' => count($imagenesGuardadas)]);
             return $this->success($tarea, 'Tarea completada correctamente');
-            
         } catch (Exception $e) {
             Logger::error('Error al completar tarea', ['error' => $e->getMessage()]);
             return $this->serverError('Error al completar tarea');
         }
     }
 
-    /**
-     * PUT /admin/tareas/:id/reabrir
-     * Reabrir tarea completada (formato legacy)
-     */
     public function reabrirTareaAdmin($taskId)
     {
         try {
             $taskId = (int)$taskId;
             $data = json_decode($this->app->request()->getBody(), true);
-            
+
             $motivo = $data['motivo'] ?? '';
             $observaciones = $data['observaciones'] ?? null;
-            
+
             if (empty($motivo)) {
                 return $this->validationError('El motivo de reapertura es requerido');
             }
-            
-            // Obtener usuario autenticado
+
             $user = $this->getAuthenticatedUser();
             $userId = $user['id'] ?? $user['user_id'] ?? 0;
-            
-            // Nuevos valores opcionales
+
             $newValues = [];
             if (isset($data['assigned_user_id'])) {
                 $newValues['assigned_user_id'] = $data['assigned_user_id'];
@@ -443,15 +358,15 @@ class TaskController
             if (isset($data['priority']) || isset($data['prioridad'])) {
                 $newValues['priority'] = $data['priority'] ?? $this->priorityToInternal($data['prioridad'] ?? 'medium');
             }
-            
+
             $result = $this->repository->reopen($taskId, $userId, $motivo, $observaciones, !empty($newValues) ? $newValues : null);
-            
+
             if (!$result) {
                 return $this->validationError('No se pudo reabrir la tarea. Verifica que esté completada o incompleta.');
             }
-            
+
             $tarea = $this->repository->getTareaById($taskId);
-            
+
             Logger::info('Tarea reabierta', ['id' => $taskId, 'motivo' => $motivo, 'por' => $userId]);
             return $this->success($tarea, 'Tarea reabierta correctamente');
         } catch (Exception $e) {
@@ -459,26 +374,13 @@ class TaskController
             return $this->serverError('Error al reabrir tarea');
         }
     }
-    
-    /**
-     * Convierte prioridad legacy a formato interno
-     */
+
     private function priorityToInternal(string $priority): string
     {
         $map = ['Alta' => 'high', 'Media' => 'medium', 'Baja' => 'low'];
         return $map[$priority] ?? $priority;
     }
 
-    // ============================================================
-    // SECCIÓN: MÉTODOS PÚBLICOS (ENDPOINTS CON ENCRIPTACIÓN)
-    // ============================================================
-
-    /**
-     * GET /
-     * Listar tareas según rol del usuario
-     * - Admin: Ve todas, puede filtrar por fecha
-     * - User: Ve ordenadas por Prioridad > Estado > Deadline
-     */
     public function getAll()
     {
         try {
@@ -491,7 +393,6 @@ class TaskController
             $isAdmin = $userData['role'] === 'admin';
 
             if ($isAdmin) {
-                // Admin: obtener filtros de query params
                 $filters = [
                     'fecha_inicio' => $this->app->request()->get('fecha_inicio'),
                     'fecha_fin' => $this->app->request()->get('fecha_fin'),
@@ -513,7 +414,6 @@ class TaskController
                     'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
                 ]);
             } else {
-                // Usuario: obtener sus tareas ordenadas + tareas disponibles
                 $myTasks = $this->repository->getAllForUser($userData['id']);
                 $availableTasks = $this->repository->getAvailableTasks();
 
@@ -539,7 +439,6 @@ class TaskController
 
             $response['data'] = $tasks;
             return $this->sendResponse($response);
-
         } catch (Exception $e) {
             Logger::error('Error al listar tareas', [
                 'error' => $e->getMessage(),
@@ -551,10 +450,6 @@ class TaskController
         }
     }
 
-    /**
-     * POST /
-     * Crear nueva tarea (solo Admin)
-     */
     public function create()
     {
         try {
@@ -564,7 +459,6 @@ class TaskController
                 return $this->sendResponse($this->validator->invalidSession());
             }
 
-            // Solo admin puede crear tareas
             if ($userData['role'] !== 'admin') {
                 Logger::warning('Intento de crear tarea sin permisos', [
                     'user_id' => $userData['id'],
@@ -574,27 +468,32 @@ class TaskController
                 return $this->sendResponse($this->validator->adminRequired());
             }
 
-            // Obtener y desencriptar datos
             $data = $this->getDecryptedRequestData();
 
             if (!$data) {
                 return $this->sendResponse($this->validator->invalidRequestFormat());
             }
 
-            // Calcular deadline si viene vacío (+2 días) ANTES de validar
             if (empty($data['deadline'])) {
-                $data['deadline'] = date('Y-m-d', strtotime('+' . self::DEFAULT_DEADLINE_DAYS . ' days'));
+                $data['deadline'] = TaskConfig::getDefaultDeadline();
             }
 
             // Validar datos
             if (!$this->validator->validateCreate($data)) {
                 return $this->sendResponse($this->validator->createValidationError());
             }
+            $fechaAsignacion = $data['fecha_asignacion'] ?? date('Y-m-d H:i:s');
+            $deadline = $data['deadline'] ?? TaskConfig::getDefaultDeadline($fechaAsignacion);
 
-            // Establecer status por defecto usando constante global
-            $data['status'] = STATUS_PENDING;
+            $errorMsg = null;
+            if (!TaskValidator::validateDeadlineAfterOrEqual($fechaAsignacion, $deadline, $errorMsg)) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => $errorMsg]);
+                return;
+            }
 
-            // Sanitizar datos
+            $data['status'] = TaskConfig::STATUS_PENDING;
+
             $data['title'] = trim($data['title']);
             $data['description'] = isset($data['description']) && !empty($data['description'])
                 ? trim($data['description'])
@@ -602,7 +501,6 @@ class TaskController
             $data['priority'] = trim($data['priority']);
             $data['deadline'] = trim($data['deadline']);
 
-            // Crear tarea (pasamos el ID del usuario que crea)
             $taskId = $this->repository->create($data, $userData['id']);
 
             if ($taskId) {
@@ -626,7 +524,6 @@ class TaskController
             }
 
             return $this->sendResponse($this->validator->createError());
-
         } catch (Exception $e) {
             Logger::error('Error al crear tarea', [
                 'error' => $e->getMessage(),
@@ -638,12 +535,6 @@ class TaskController
         }
     }
 
-    /**
-     * PUT /:id/assign
-     * Asignar tarea
-     * - User: Auto-asignación (si está disponible)
-     * - Admin: Reasignar a cualquier usuario
-     */
     public function assign($taskId)
     {
         try {
@@ -655,7 +546,6 @@ class TaskController
 
             $taskId = (int)$taskId;
 
-            // Verificar que la tarea existe
             $task = $this->repository->getTareaById($taskId);
 
             if (!$task) {
@@ -665,16 +555,14 @@ class TaskController
             $isAdmin = $userData['role'] === 'admin';
 
             if ($isAdmin) {
-                // Admin: puede reasignar a cualquier usuario
                 $data = $this->getDecryptedRequestData();
-                
+
                 if (!$data || empty($data['user_id'])) {
                     return $this->sendResponse($this->validator->incompleteData());
                 }
 
                 $targetUserId = (int)$data['user_id'];
 
-                // Verificar que el usuario destino existe
                 if (!$this->repository->userExists($targetUserId)) {
                     return $this->sendResponse($this->validator->userNotFound());
                 }
@@ -694,7 +582,6 @@ class TaskController
                     return $this->sendResponse($this->validator->assignSuccess($username ?? 'Usuario'));
                 }
             } else {
-                // Usuario: solo puede auto-asignarse si está disponible
                 if (!$this->repository->isAvailable($taskId)) {
                     return $this->sendResponse($this->validator->alreadyAssigned());
                 }
@@ -714,7 +601,6 @@ class TaskController
             }
 
             return $this->sendResponse($this->validator->assignError());
-
         } catch (Exception $e) {
             Logger::error('Error al asignar tarea', [
                 'task_id' => $taskId ?? 'unknown',
@@ -727,13 +613,6 @@ class TaskController
         }
     }
 
-    /**
-     * POST /:id/complete
-     * Completar tarea (solo usuario asignado)
-     * Requiere imagen de evidencia
-     * 
-     * NOTA: Es POST porque Slim 2 tiene problemas leyendo $_FILES con PUT
-     */
     public function complete($taskId)
     {
         try {
@@ -745,14 +624,12 @@ class TaskController
 
             $taskId = (int)$taskId;
 
-            // Verificar que la tarea existe
             $task = $this->repository->getTareaById($taskId);
 
             if (!$task) {
                 return $this->sendResponse($this->validator->taskNotFound());
             }
 
-            // Verificar que la tarea está asignada al usuario
             if ((int)$task['assigned_user_id'] !== $userData['id']) {
                 Logger::warning('Intento de completar tarea no asignada', [
                     'task_id' => $taskId,
@@ -763,24 +640,20 @@ class TaskController
                 return $this->sendResponse($this->validator->notAssignedToYou());
             }
 
-            // Verificar que la tarea no está ya completada
             if ($task['status'] === 'completed') {
                 return $this->sendResponse($this->validator->alreadyCompleted());
             }
 
-            // Verificar que el estado permite completar
             $allowedStatuses = ['pending', 'in_process'];
             if (!in_array($task['status'], $allowedStatuses)) {
                 return $this->sendResponse($this->validator->cannotComplete());
             }
 
             $observaciones = isset($_POST['observaciones']) ? trim($_POST['observaciones']) : '';
-            
-            // Usar helper para procesar archivos
+
             $uploadResult = $this->processUploadedFiles();
             $hasFiles = !empty($uploadResult['files']);
 
-            // Requerimos al menos observaciones
             if (empty($observaciones) && !$hasFiles) {
                 return $this->sendResponse([
                     'tipo' => 0,
@@ -788,8 +661,7 @@ class TaskController
                     'data' => null
                 ]);
             }
-            
-            // Validar error de subida
+
             if ($uploadResult['error']) {
                 return $this->sendResponse([
                     'tipo' => 0,
@@ -806,25 +678,22 @@ class TaskController
                     return $this->sendResponse($this->validator->imageValidationError());
                 }
 
-                // Procesar y guardar imagen
                 $savedFile = $this->saveFileToDisk($file, $taskId, $userData['id']);
 
                 if (!$savedFile) {
                     return $this->sendResponse($this->validator->imageUploadError());
                 }
-                
+
                 $imagenesGuardadas[] = $savedFile;
                 if (!$evidencePath) {
                     $evidencePath = $savedFile['path'];
                 }
             }
-            
-            // Guardar evidencias en BD
+
             if (!empty($imagenesGuardadas)) {
                 $this->repository->guardarEvidencias($taskId, $userData['id'], $imagenesGuardadas, $observaciones);
             }
 
-            // Completar tarea con observaciones
             $result = $this->repository->complete($taskId, $userData['id'], $observaciones, $evidencePath);
 
             if ($result) {
@@ -845,7 +714,6 @@ class TaskController
             }
 
             return $this->sendResponse($this->validator->completeError());
-
         } catch (Exception $e) {
             Logger::error('Error al completar tarea', [
                 'task_id' => $taskId ?? 'unknown',
@@ -858,10 +726,6 @@ class TaskController
         }
     }
 
-    /**
-     * GET /:id
-     * Obtener detalle de una tarea
-     */
     public function getById($taskId)
     {
         try {
@@ -878,7 +742,6 @@ class TaskController
                 return $this->sendResponse($this->validator->taskNotFound());
             }
 
-            // Usuario solo puede ver sus propias tareas o tareas disponibles
             if ($userData['role'] !== 'admin') {
                 $isOwner = (int)$task['assigned_user_id'] === $userData['id'];
                 $isAvailable = $task['assigned_user_id'] === null;
@@ -895,7 +758,6 @@ class TaskController
             ];
 
             return $this->sendResponse($response);
-
         } catch (Exception $e) {
             Logger::error('Error al obtener tarea', [
                 'task_id' => $taskId ?? 'unknown',
@@ -906,10 +768,6 @@ class TaskController
         }
     }
 
-    /**
-     * PUT /:id/status
-     * Actualiza el estado de una tarea (solo Admin)
-     */
     public function updateStatus($taskId)
     {
         try {
@@ -919,7 +777,6 @@ class TaskController
                 return $this->sendResponse($this->validator->invalidSession());
             }
 
-            // Solo admin puede cambiar estado manualmente
             if ($userData['role'] !== 'admin') {
                 Logger::warning('Intento de cambiar estado sin permisos', [
                     'user_id' => $userData['id'],
@@ -932,14 +789,12 @@ class TaskController
 
             $taskId = (int)$taskId;
 
-            // Verificar que la tarea existe
             $task = $this->repository->getTareaById($taskId);
 
             if (!$task) {
                 return $this->sendResponse($this->validator->taskNotFound());
             }
 
-            // Obtener y desencriptar datos
             $data = $this->getDecryptedRequestData();
 
             if (!$data || empty($data['status'])) {
@@ -948,7 +803,6 @@ class TaskController
 
             $newStatus = trim($data['status']);
 
-            // Validar estado
             if (!$this->validator->validateStatus($newStatus)) {
                 return $this->sendResponse($this->validator->invalidStatus());
             }
@@ -969,7 +823,6 @@ class TaskController
             }
 
             return $this->sendResponse($this->validator->statusUpdateError());
-
         } catch (Exception $e) {
             Logger::error('Error al actualizar estado de tarea', [
                 'task_id' => $taskId ?? 'unknown',
@@ -982,10 +835,6 @@ class TaskController
         }
     }
 
-    /**
-     * DELETE /:id
-     * Elimina una tarea (solo Admin)
-     */
     public function delete($taskId)
     {
         try {
@@ -995,8 +844,7 @@ class TaskController
                 return $this->sendResponse($this->validator->invalidSession());
             }
 
-            // Solo admin puede eliminar tareas
-            if ($userData['role'] !== 'admin') {
+            if ($userData['role'] !== TaskConfig::ROLE_ADMIN) {
                 Logger::warning('Intento de eliminar tarea sin permisos', [
                     'user_id' => $userData['id'],
                     'task_id' => $taskId,
@@ -1008,19 +856,16 @@ class TaskController
 
             $taskId = (int)$taskId;
 
-            // Verificar que la tarea existe
             $task = $this->repository->getTareaById($taskId);
 
             if (!$task) {
                 return $this->sendResponse($this->validator->taskNotFound());
             }
 
-            // No permitir eliminar tareas completadas (opcional)
             if ($task['status'] === 'completed') {
                 return $this->sendResponse($this->validator->cannotDeleteCompleted());
             }
 
-            // Eliminar tarea (soft delete - marca como inactive)
             $result = $this->repository->delete($taskId, $userData['id']);
 
             if ($result) {
@@ -1035,7 +880,6 @@ class TaskController
             }
 
             return $this->sendResponse($this->validator->deleteError());
-
         } catch (Exception $e) {
             Logger::error('Error al eliminar tarea', [
                 'task_id' => $taskId ?? 'unknown',
@@ -1048,10 +892,6 @@ class TaskController
         }
     }
 
-    /**
-     * PUT /:id/reopen
-     * Reabre una tarea completada o incompleta (solo Admin)
-     */
     public function reopen($taskId)
     {
         try {
@@ -1061,8 +901,7 @@ class TaskController
                 return $this->sendResponse($this->validator->invalidSession());
             }
 
-            // Solo admin puede reabrir tareas
-            if ($userData['role'] !== 'admin') {
+            if ($userData['role'] !== TaskConfig::ROLE_ADMIN) {
                 Logger::warning('Intento de reabrir tarea sin permisos', [
                     'user_id' => $userData['id'],
                     'task_id' => $taskId,
@@ -1074,14 +913,12 @@ class TaskController
 
             $taskId = (int)$taskId;
 
-            // Verificar que la tarea existe
             $task = $this->repository->getTareaById($taskId);
 
             if (!$task) {
                 return $this->sendResponse($this->validator->taskNotFound());
             }
 
-            // Solo se pueden reabrir tareas completadas o incompletas
             $allowedStatuses = ['completed', 'incomplete'];
             if (!in_array($task['status'], $allowedStatuses)) {
                 return $this->sendResponse([
@@ -1091,7 +928,6 @@ class TaskController
                 ]);
             }
 
-            // Obtener datos de reapertura
             $data = $this->getDecryptedRequestData();
 
             if (!$data || empty($data['motivo'])) {
@@ -1104,8 +940,7 @@ class TaskController
 
             $motivo = trim($data['motivo']);
             $observaciones = isset($data['observaciones']) ? trim($data['observaciones']) : null;
-            
-            // Nuevos valores opcionales
+
             $newValues = [];
             if (isset($data['assigned_user_id'])) {
                 $newValues['assigned_user_id'] = $data['assigned_user_id'];
@@ -1117,7 +952,6 @@ class TaskController
                 $newValues['priority'] = $data['priority'] ?? $this->priorityToInternal($data['prioridad'] ?? 'medium');
             }
 
-            // Reabrir tarea
             $result = $this->repository->reopen($taskId, $userData['id'], $motivo, $observaciones, !empty($newValues) ? $newValues : null);
 
             if ($result) {
@@ -1145,7 +979,6 @@ class TaskController
                 'mensajes' => ['Error al reabrir la tarea.'],
                 'data' => null
             ]);
-
         } catch (Exception $e) {
             Logger::error('Error al reabrir tarea', [
                 'task_id' => $taskId ?? 'unknown',
@@ -1158,10 +991,6 @@ class TaskController
         }
     }
 
-    /**
-     * GET /statistics
-     * Obtiene estadísticas de tareas
-     */
     public function getStatistics()
     {
         try {
@@ -1171,8 +1000,8 @@ class TaskController
                 return $this->sendResponse($this->validator->invalidSession());
             }
 
-            $isAdmin = $userData['role'] === 'admin';
-            
+            $isAdmin = $userData['role'] === TaskConfig::ROLE_ADMIN;
+
             // Admin ve todas las estadísticas, usuario solo las suyas
             $userId = $isAdmin ? null : $userData['id'];
             $stats = $this->repository->getStatistics($userId);
@@ -1182,7 +1011,6 @@ class TaskController
                 'mensajes' => ['Estadísticas obtenidas exitosamente.'],
                 'data' => $stats
             ]);
-
         } catch (Exception $e) {
             Logger::error('Error al obtener estadísticas', [
                 'error' => $e->getMessage(),
@@ -1192,10 +1020,6 @@ class TaskController
         }
     }
 
-    /**
-     * GET /available
-     * Obtiene tareas disponibles para auto-asignación (solo del día actual)
-     */
     public function getAvailable()
     {
         try {
@@ -1212,7 +1036,6 @@ class TaskController
                 'mensajes' => [count($tasks) . ' tareas disponibles para hoy.'],
                 'data' => $tasks
             ]);
-
         } catch (Exception $e) {
             Logger::error('Error al obtener tareas disponibles', [
                 'error' => $e->getMessage(),
@@ -1222,10 +1045,6 @@ class TaskController
         }
     }
 
-    /**
-     * GET /users
-     * Obtiene usuarios disponibles para asignación (solo Admin)
-     */
     public function getAvailableUsers()
     {
         try {
@@ -1246,7 +1065,6 @@ class TaskController
                 'mensajes' => [count($users) . ' usuarios disponibles.'],
                 'data' => $users
             ]);
-
         } catch (Exception $e) {
             Logger::error('Error al obtener usuarios', [
                 'error' => $e->getMessage(),
@@ -1256,13 +1074,6 @@ class TaskController
         }
     }
 
-    // ============================================================
-    // SECCIÓN: MÉTODOS PRIVADOS DE APOYO
-    // ============================================================
-
-    /**
-     * Obtiene el usuario autenticado desde el middleware JWT
-     */
     private function getAuthenticatedUser(): ?array
     {
         return isset($this->app->user) ? $this->app->user : null;
@@ -1289,9 +1100,6 @@ class TaskController
         return json_decode($decrypted, true);
     }
 
-    /**
-     * Desencripta datos usando AES-256-CBC
-     */
     private function decryptData(string $encryptedPayload, string $iv): ?string
     {
         try {
@@ -1307,9 +1115,6 @@ class TaskController
         }
     }
 
-    /**
-     * Encripta datos usando AES-256-CBC
-     */
     private function encryptData(string $data): array
     {
         $key = hash('sha256', $this->encryptionKey, true);
@@ -1323,15 +1128,11 @@ class TaskController
         ];
     }
 
-    /**
-     * Guarda la imagen de evidencia usando constantes globales
-     */
     private function saveEvidenceImage(array $file, int $taskId, int $userId): ?string
     {
         try {
-            // Crear directorio si no existe (usando constante global)
-            if (!is_dir(UPLOAD_DIR)) {
-                mkdir(UPLOAD_DIR, 0755, true);
+            if (!is_dir(TaskConfig::UPLOAD_DIR)) {
+                mkdir(TaskConfig::UPLOAD_DIR, 0755, true);
             }
 
             // Generar nombre único
@@ -1344,15 +1145,13 @@ class TaskController
                 strtolower($extension)
             );
 
-            $destination = UPLOAD_DIR . $filename;
+            $destination = TaskConfig::UPLOAD_DIR . $filename;
 
-            // Mover archivo
             if (move_uploaded_file($file['tmp_name'], $destination)) {
-                return UPLOAD_PATH_RELATIVE . $filename;
+                return TaskConfig::UPLOAD_PATH_RELATIVE . $filename;
             }
 
             return null;
-
         } catch (Exception $e) {
             Logger::error('Error al guardar imagen de evidencia', [
                 'task_id' => $taskId,
@@ -1363,9 +1162,6 @@ class TaskController
         }
     }
 
-    /**
-     * Envía la respuesta JSON
-     */
     private function sendResponse(array $responseData): void
     {
         $this->app->contentType('application/json; charset=utf-8');
@@ -1376,19 +1172,14 @@ class TaskController
         ], JSON_UNESCAPED_UNICODE);
     }
 
-    /**
-     * Envía respuesta en formato legacy (para endpoints admin)
-     * Similar a sendResponse pero con manejo de status HTTP
-     */
     private function sendLegacyResponse(array $data, int $statusCode = 200): void
     {
         $response = $this->app->response();
         $response->header('Content-Type', 'application/json; charset=utf-8');
         $response->status($statusCode);
-        
+
         $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
-        
-        // Si hay error de JSON, loguear y devolver error genérico
+
         if ($json === false) {
             Logger::error('Error al codificar JSON', ['error' => json_last_error_msg()]);
             $json = json_encode([
@@ -1397,8 +1188,7 @@ class TaskController
                 'data' => null
             ]);
         }
-        
+
         $response->body($json);
     }
 }
-

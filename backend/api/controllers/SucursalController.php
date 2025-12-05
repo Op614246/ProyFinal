@@ -1,10 +1,4 @@
 <?php
-/**
- * SucursalController.php
- * 
- * Controlador para gestión de sucursales
- */
-
 require_once __DIR__ . '/../core/Logger.php';
 require_once __DIR__ . '/../core/CryptoHelper.php';
 
@@ -21,10 +15,6 @@ class SucursalController
         $this->encryptionKey = getenv('ENCRYPTION_KEY');
     }
 
-    /**
-     * GET /
-     * Listar todas las sucursales activas
-     */
     public function getAll()
     {
         try {
@@ -57,10 +47,6 @@ class SucursalController
         }
     }
 
-    /**
-     * GET /:id
-     * Obtener una sucursal por ID
-     */
     public function getById($id)
     {
         try {
@@ -100,10 +86,6 @@ class SucursalController
         }
     }
 
-    /**
-     * POST /
-     * Crear nueva sucursal (Solo Admin)
-     */
     public function create()
     {
         try {
@@ -132,7 +114,6 @@ class SucursalController
                 ]);
             }
 
-            // Validaciones
             if (empty($data['nombre'])) {
                 return $this->sendResponse([
                     'tipo' => 0,
@@ -179,10 +160,6 @@ class SucursalController
         }
     }
 
-    /**
-     * PUT /:id
-     * Actualizar sucursal (Solo Admin)
-     */
     public function update($id)
     {
         try {
@@ -220,7 +197,6 @@ class SucursalController
                 ]);
             }
 
-            // Validar nombre único si se está cambiando
             if (!empty($data['nombre']) && $data['nombre'] !== $sucursal['nombre']) {
                 if ($this->repository->existsByName($data['nombre'], (int)$id)) {
                     return $this->sendResponse([
@@ -261,10 +237,6 @@ class SucursalController
         }
     }
 
-    /**
-     * DELETE /:id
-     * Eliminar sucursal (Solo Admin)
-     */
     public function delete($id)
     {
         try {
@@ -293,7 +265,6 @@ class SucursalController
                 ]);
             }
 
-            // Verificar si tiene tareas asociadas
             $taskCount = $this->repository->countTasks((int)$id);
             if ($taskCount > 0) {
                 return $this->sendResponse([
@@ -332,10 +303,6 @@ class SucursalController
             ]);
         }
     }
-
-    // ============================================================
-    // MÉTODOS PRIVADOS
-    // ============================================================
 
     private function getAuthenticatedUser(): ?array
     {
