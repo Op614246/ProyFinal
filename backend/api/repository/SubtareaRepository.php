@@ -69,100 +69,145 @@ class SubtareaRepository {
     }
     
     public function crearSubtarea($data) {
-        $sql = "
-            INSERT INTO subtareas (
-                task_id, titulo, descripcion, estado, prioridad,
-                categoria_id, usuarioasignado_id, progreso
-            ) VALUES (
-                :task_id, :titulo, :descripcion, :estado, :prioridad,
-                :categoria_id, :usuarioasignado_id, 0
-            )
-        ";
+        try {
+            $this->db->beginTransaction();
 
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([
-            ':task_id' => $data['task_id'],
-            ':titulo' => $data['titulo'],
-            ':descripcion' => $data['descripcion'] ?? null,
-            ':estado' => $data['estado'] ?? 'Pendiente',
-            ':prioridad' => $data['prioridad'] ?? 'Media',
-            ':categoria_id' => $data['categoria_id'] ?? null,
-            ':usuarioasignado_id' => $data['usuarioasignado_id'] ?? null
-        ]);
+            $sql = "
+                INSERT INTO subtareas (
+                    task_id, titulo, descripcion, estado, prioridad,
+                    categoria_id, usuarioasignado_id, progreso, is_deleted
+                ) VALUES (
+                    :task_id, :titulo, :descripcion, :estado, :prioridad,
+                    :categoria_id, :usuarioasignado_id, 0, 0
+                )
+            ";
 
-        $subtareaId = $this->db->lastInsertId();
-        $this->actualizarProgresoTarea($data['task_id']);
-        return $subtareaId;
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                ':task_id' => $data['task_id'],
+                ':titulo' => $data['titulo'],
+                ':descripcion' => $data['descripcion'] ?? null,
+                ':estado' => $data['estado'] ?? 'Pendiente',
+                ':prioridad' => $data['prioridad'] ?? 'Media',
+                ':categoria_id' => $data['categoria_id'] ?? null,
+                ':usuarioasignado_id' => $data['usuarioasignado_id'] ?? null
+            ]);
+
+            $subtareaId = $this->db->lastInsertId();
+            $this->actualizarProgresoTarea($data['task_id']);
+            
+            $this->db->commit();
+            return $subtareaId;
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
     }
     
     public function actualizarSubtarea($subtareaId, $data) {
-        $campos = [];
-        $params = [':id' => $subtareaId];
-        
-        $camposPermitidos = [
-            'titulo', 'descripcion', 'estado', 'prioridad',
-            'categoria_id', 'usuarioasignado_id', 'progreso', 'completed_by'
-        ];
-        
-        foreach ($camposPermitidos as $campo) {
-            if (array_key_exists($campo, $data)) {
-                $campos[] = "$campo = :$campo";
-                $params[":$campo"] = $data[$campo];
+        try {
+            $this->db->beginTransaction();
+
+            $campos = [];
+            $params = [':id' => $subtareaId];
+            
+            $camposPermitidos = [
+                'titulo', 'descripcion', 'estado', 'prioridad',
+                'categoria_id', 'usuarioasignado_id', 'progreso', 'completed_by'
+            ];
+            
+            foreach ($camposPermitidos as $campo) {
+                if (array_key_exists($campo, $data)) {
+                    $campos[] = "$campo = :$campo";
+                    $params[":$campo"] = $data[$campo];
+                }
             }
+            
+            if (isset($data['estado']) && $data['estado'] === 'Completada') {
+                $campos[] = "progreso = 100";
+            }
+            
+            if (empty($campos)) {
+                $this->db->rollBack();
+                return false;
+            }
+            
+            $sql = "UPDATE subtareas SET " . implode(', ', $campos) . " WHERE id = :id AND is_deleted = 0";
+            $stmt = $this->db->prepare($sql);
+            $result = $stmt->execute($params);
+            
+            $subtarea = $this->getSubtareaById($subtareaId);
+            if ($subtarea) {
+                $this->actualizarProgresoTarea($subtarea['task_id']);
+            }
+            
+            $this->db->commit();
+            return $result;
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
         }
-        
-        if (isset($data['estado']) && $data['estado'] === 'Completada') {
-            $campos[] = "progreso = 100";
-        }
-        
-        if (empty($campos)) {
-            return false;
-        }
-        
-        $sql = "UPDATE subtareas SET " . implode(', ', $campos) . " WHERE id = :id";
-        $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute($params);
-        
-        $subtarea = $this->getSubtareaById($subtareaId);
-        if ($subtarea) {
-            $this->actualizarProgresoTarea($subtarea['task_id']);
-        }
-        
-        return $result;
     }
     
     public function eliminarSubtarea($subtareaId) {
-        $subtarea = $this->getSubtareaById($subtareaId);
-        $taskId = $subtarea ? $subtarea['task_id'] : null;
-        
-        $sql = "DELETE FROM subtareas WHERE id = ?";
-        $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute([$subtareaId]);
-        
-        if ($taskId) {
-            $this->actualizarProgresoTarea($taskId);
+        try {
+            $this->db->beginTransaction();
+
+            $subtarea = $this->getSubtareaById($subtareaId);
+            $taskId = $subtarea ? $subtarea['task_id'] : null;
+            
+            // Borrado lógico con is_deleted
+            $sql = "UPDATE subtareas SET is_deleted = 1 WHERE id = ?";
+            $stmt = $this->db->prepare($sql);
+            $result = $stmt->execute([$subtareaId]);
+            
+            if ($taskId) {
+                $this->actualizarProgresoTarea($taskId);
+            }
+            
+            $this->db->commit();
+            return $result;
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
         }
-        
-        return $result;
     }
     
     public function completarSubtarea($subtareaId, $observaciones = null) {
-        $sql = "UPDATE subtareas SET estado = 'Completada', progreso = 100 WHERE id = ?";
-        $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute([$subtareaId]);
-        
-        $subtarea = $this->getSubtareaById($subtareaId);
-        if ($subtarea) {
-            $this->actualizarProgresoTarea($subtarea['task_id']);
+        try {
+            $this->db->beginTransaction();
+
+            $sql = "UPDATE subtareas SET estado = 'Completada', progreso = 100 WHERE id = ? AND is_deleted = 0";
+            $stmt = $this->db->prepare($sql);
+            $result = $stmt->execute([$subtareaId]);
+            
+            $subtarea = $this->getSubtareaById($subtareaId);
+            if ($subtarea) {
+                $this->actualizarProgresoTarea($subtarea['task_id']);
+            }
+            
+            $this->db->commit();
+            return $result;
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
         }
-        
-        return $result;
     }
     
     public function iniciarSubtarea($subtareaId) {
-        $sql = "UPDATE subtareas SET estado = 'En progreso' WHERE id = ?";
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute([$subtareaId]);
+        try {
+            $this->db->beginTransaction();
+
+            $sql = "UPDATE subtareas SET estado = 'En progreso' WHERE id = ? AND is_deleted = 0";
+            $stmt = $this->db->prepare($sql);
+            $result = $stmt->execute([$subtareaId]);
+            
+            $this->db->commit();
+            return $result;
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
     }
     
     public function actualizarProgresoTarea($taskId) {
@@ -187,8 +232,10 @@ class SubtareaRepository {
         $stmtUpdate = $this->db->prepare($sqlUpdate);
         $stmtUpdate->execute([$progreso, $taskId]);
         
+        // Solo marcar como completada si TODAS las subtareas están completadas Y la tarea está en progreso
         if ($stats['total'] > 0 && $stats['completadas'] == $stats['total']) {
-            $sqlComplete = "UPDATE tasks SET status = 'completed', completed_at = NOW() WHERE id = ? AND status != 'completed'";
+            $sqlComplete = "UPDATE tasks SET status = 'completed', completed_at = NOW() 
+                           WHERE id = ? AND status = 'in_process' AND is_deleted = 0";
             $stmtComplete = $this->db->prepare($sqlComplete);
             $stmtComplete->execute([$taskId]);
         }
@@ -213,9 +260,19 @@ class SubtareaRepository {
     }
     
     public function asignarSubtarea($subtareaId, $usuarioId) {
-        $sql = "UPDATE subtareas SET usuarioasignado_id = ? WHERE id = ?";
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute([$usuarioId, $subtareaId]);
+        try {
+            $this->db->beginTransaction();
+
+            $sql = "UPDATE subtareas SET usuarioasignado_id = ? WHERE id = ? AND is_deleted = 0";
+            $stmt = $this->db->prepare($sql);
+            $result = $stmt->execute([$usuarioId, $subtareaId]);
+            
+            $this->db->commit();
+            return $result;
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
     }
     
     public function getSubtareasByUsuario($usuarioId, $fecha = null) {

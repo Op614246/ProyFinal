@@ -12,7 +12,7 @@ class AuthRepository {
     }
 
     private function encryptUsername($username) {
-        return $this->crypto->encryptDeterministic(strtolower(trim($username)));
+        return $this->crypto->encryptDeterministic(trim($username));
     }
 
     private function decryptUsername($encryptedUsername) {

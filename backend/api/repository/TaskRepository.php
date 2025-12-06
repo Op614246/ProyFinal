@@ -140,6 +140,7 @@ class TaskRepository
                 LEFT JOIN users uc ON t.created_by_user_id = uc.id
                 LEFT JOIN users ua ON t.assigned_user_id = ua.id";
         
+        // Filtrar tareas no eliminadas
         $conditions[] = "t.is_deleted = 0";
         
         if ($userId !== null) {
@@ -147,11 +148,13 @@ class TaskRepository
             $params[] = $userId;
         }
         
+        // Filtro por fecha de asignación (exacta)
         if (!empty($filtros['fecha'])) {
             $conditions[] = "DATE(t.fecha_asignacion) = ?";
             $params[] = $filtros['fecha'];
         }
         
+        // Filtro por rango de fechas
         if (!empty($filtros['fecha_inicio'])) {
             $conditions[] = "DATE(t.fecha_asignacion) >= ?";
             $params[] = $filtros['fecha_inicio'];
@@ -201,6 +204,12 @@ class TaskRepository
             FIELD(t.status, 'in_process', 'pending', 'incomplete', 'inactive', 'completed'),
             FIELD(t.priority, 'high', 'medium', 'low'),
             t.horainicio ASC";
+        
+        Logger::debug('getTareas SQL', [
+            'sql' => $sql,
+            'params' => $params,
+            'filtros' => $filtros
+        ]);
         
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
@@ -369,81 +378,115 @@ class TaskRepository
 
     public function create(array $data, int $createdByUserId)
     {
-        $sql = "INSERT INTO tasks (
-                    title, description, categoria_id, status, priority,
-                    deadline, fecha_asignacion, horainicio, horafin,
-                    assigned_user_id, created_by_user_id, sucursal_id,
-                    created_at, updated_at
-                ) VALUES (
-                    :title, :description, :categoria_id, :status, :priority,
-                    :deadline, :fecha_asignacion, :horainicio, :horafin,
-                    :assigned_user_id, :created_by_user_id, :sucursal_id,
-                    NOW(), NOW()
-                )";
+        try {
+            $this->db->beginTransaction();
 
-        $fechaAsignacion = $data['fecha_asignacion'] ?? date('Y-m-d');
-        $deadline = $data['deadline'] ?? TaskConfig::getDefaultDeadline($fechaAsignacion);
+            // Validar que deadline no sea antes que fecha_asignacion
+            $fechaAsignacion = $data['fecha_asignacion'] ?? date('Y-m-d');
+            $deadline = $data['deadline'] ?? TaskConfig::getDefaultDeadline($fechaAsignacion);
+            
+            if (strtotime($deadline) < strtotime($fechaAsignacion)) {
+                $this->db->rollBack();
+                throw new InvalidArgumentException('La fecha de vencimiento no puede ser anterior a la fecha de asignación');
+            }
 
-        $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute([
-            ':title' => $data['title'],
-            ':description' => $data['description'] ?? null,
-            ':categoria_id' => $data['categoria_id'] ?? null,
-            ':status' => $data['status'] ?? 'pending',
-            ':priority' => $data['priority'] ?? 'medium',
-            ':deadline' => $deadline,
-            ':fecha_asignacion' => $fechaAsignacion,
-            ':horainicio' => $data['horainicio'] ?? null,
-            ':horafin' => $data['horafin'] ?? null,
-            ':assigned_user_id' => $data['assigned_user_id'] ?? null,
-            ':created_by_user_id' => $createdByUserId,
-            ':sucursal_id' => $data['sucursal_id'] ?? null
-        ]);
+            $sql = "INSERT INTO tasks (
+                        title, description, categoria_id, status, priority,
+                        deadline, fecha_asignacion, horainicio, horafin,
+                        assigned_user_id, created_by_user_id, sucursal_id,
+                        is_deleted, created_at, updated_at
+                    ) VALUES (
+                        :title, :description, :categoria_id, :status, :priority,
+                        :deadline, :fecha_asignacion, :horainicio, :horafin,
+                        :assigned_user_id, :created_by_user_id, :sucursal_id,
+                        0, NOW(), NOW()
+                    )";
 
-        if ($result) {
-            $taskId = (int)$this->db->lastInsertId();
-            $this->logHistory($taskId, $createdByUserId, 'created', null, json_encode($data));
-            return $taskId;
+            $stmt = $this->db->prepare($sql);
+            $result = $stmt->execute([
+                ':title' => $data['title'],
+                ':description' => $data['description'] ?? null,
+                ':categoria_id' => $data['categoria_id'] ?? null,
+                ':status' => $data['status'] ?? 'pending',
+                ':priority' => $data['priority'] ?? 'medium',
+                ':deadline' => $deadline,
+                ':fecha_asignacion' => $fechaAsignacion,
+                ':horainicio' => $data['horainicio'] ?? null,
+                ':horafin' => $data['horafin'] ?? null,
+                ':assigned_user_id' => $data['assigned_user_id'] ?? null,
+                ':created_by_user_id' => $createdByUserId,
+                ':sucursal_id' => $data['sucursal_id'] ?? null
+            ]);
+
+            if ($result) {
+                $taskId = (int)$this->db->lastInsertId();
+                $this->logHistory($taskId, $createdByUserId, 'created', null, json_encode($data));
+                
+                $this->db->commit();
+                return $taskId;
+            }
+
+            $this->db->rollBack();
+            return false;
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
         }
-
-        return false;
     }
 
     public function update(int $taskId, array $data, int $userId): bool
     {
-        $oldData = $this->getTareaById($taskId);
-        
-        $fields = [];
-        $params = [':task_id' => $taskId];
+        try {
+            $this->db->beginTransaction();
 
-        $allowedFields = [
-            'title', 'description', 'categoria_id', 'status', 'priority',
-            'deadline', 'fecha_asignacion', 'horainicio', 'horafin',
-            'assigned_user_id', 'sucursal_id', 'progreso'
-        ];
-
-        foreach ($allowedFields as $field) {
-            if (array_key_exists($field, $data)) {
-                $fields[] = "$field = :$field";
-                $params[":$field"] = $data[$field];
+            $oldData = $this->getTareaById($taskId);
+            
+            // Validar que deadline no sea antes que fecha_asignacion
+            $fechaAsignacion = $data['fecha_asignacion'] ?? $oldData['fecha_asignacion'] ?? date('Y-m-d');
+            $deadline = $data['deadline'] ?? $oldData['deadline'] ?? null;
+            
+            if ($deadline && strtotime($deadline) < strtotime($fechaAsignacion)) {
+                $this->db->rollBack();
+                throw new InvalidArgumentException('La fecha de vencimiento no puede ser anterior a la fecha de asignación');
             }
+            
+            $fields = [];
+            $params = [':task_id' => $taskId];
+
+            $allowedFields = [
+                'title', 'description', 'categoria_id', 'status', 'priority',
+                'deadline', 'fecha_asignacion', 'horainicio', 'horafin',
+                'assigned_user_id', 'sucursal_id', 'progreso'
+            ];
+
+            foreach ($allowedFields as $field) {
+                if (array_key_exists($field, $data)) {
+                    $fields[] = "$field = :$field";
+                    $params[":$field"] = $data[$field];
+                }
+            }
+
+            if (empty($fields)) {
+                $this->db->rollBack();
+                return false;
+            }
+
+            $fields[] = "updated_at = NOW()";
+            $sql = "UPDATE tasks SET " . implode(', ', $fields) . " WHERE id = :task_id AND is_deleted = 0";
+
+            $stmt = $this->db->prepare($sql);
+            $result = $stmt->execute($params);
+
+            if ($result) {
+                $this->logHistory($taskId, $userId, 'updated', json_encode($oldData), json_encode($data));
+            }
+
+            $this->db->commit();
+            return $result;
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
         }
-
-        if (empty($fields)) {
-            return false;
-        }
-
-        $fields[] = "updated_at = NOW()";
-        $sql = "UPDATE tasks SET " . implode(', ', $fields) . " WHERE id = :task_id";
-
-        $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute($params);
-
-        if ($result) {
-            $this->logHistory($taskId, $userId, 'updated', json_encode($oldData), json_encode($data));
-        }
-
-        return $result;
     }
 
     public function assign(int $taskId, int $userId, int $assignedBy): bool
@@ -561,16 +604,24 @@ class TaskRepository
 
     public function delete(int $taskId, int $userId): bool
     {
-        $sql = "UPDATE tasks SET is_deleted = 1, updated_at = NOW() WHERE id = :task_id AND is_deleted = 0";
-        
-        $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute([':task_id' => $taskId]);
+        try {
+            $this->db->beginTransaction();
 
-        if ($result) {
-            $this->logHistory($taskId, $userId, 'soft_deleted', null, 'Tarea marcada como eliminada');
+            $sql = "UPDATE tasks SET is_deleted = 1, updated_at = NOW() WHERE id = :task_id AND is_deleted = 0";
+            
+            $stmt = $this->db->prepare($sql);
+            $result = $stmt->execute([':task_id' => $taskId]);
+
+            if ($result) {
+                $this->logHistory($taskId, $userId, 'soft_deleted', null, 'Tarea marcada como eliminada');
+            }
+
+            $this->db->commit();
+            return $result;
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
         }
-
-        return $result;
     }
 
     public function selfAssign(int $taskId, int $userId): bool
@@ -1008,8 +1059,36 @@ class TaskRepository
 
         try {
             $this->db->beginTransaction();
-            $evidenciaIds = [];
 
+            // Crear UN SOLO registro en task_evidencias con las observaciones
+            $sql = "INSERT INTO task_evidencias (
+                        task_id, archivo, tipo, nombre_original, tamanio, 
+                        observaciones, uploaded_by, created_at
+                    ) VALUES (?, ?, 'imagen', ?, ?, ?, ?, NOW())";
+            $stmt = $this->db->prepare($sql);
+            
+            // Para task_evidencias usamos la ruta de la primera imagen como referencia
+            // (puede ser NULL si hay múltiples imágenes)
+            $firstImagePath = isset($imagenes[0]['path']) ? $imagenes[0]['path'] : null;
+            $firstImageName = isset($imagenes[0]['name']) ? $imagenes[0]['name'] : 'múltiples imágenes';
+            $totalSize = 0;
+            foreach ($imagenes as $img) {
+                $totalSize += isset($img['size']) ? (int)$img['size'] : 0;
+            }
+            
+            $stmt->execute([
+                $taskId, 
+                $firstImagePath,
+                $firstImageName, 
+                $totalSize, 
+                $observaciones, 
+                $userId
+            ]);
+            
+            $taskEvidenciaId = (int)$this->db->lastInsertId();
+            $imagenesGuardadas = [];
+
+            // Guardar cada imagen en evidencia_imagenes vinculada al task_evidencia
             foreach ($imagenes as $img) {
                 $fileSizeBytes = isset($img['size']) ? (int)$img['size'] : 0;
                 $fileSizeKb = round($fileSizeBytes / 1024, 2);
@@ -1023,28 +1102,22 @@ class TaskRepository
                     throw new Exception("Tipo de archivo no permitido: {$img['type']}");
                 }
 
-                // Insertar en task_evidencias
-                $sql = "INSERT INTO task_evidencias (
-                            task_id, archivo, tipo, nombre_original, tamanio, 
-                            observaciones, uploaded_by, created_at
-                        ) VALUES (?, ?, 'imagen', ?, ?, ?, ?, NOW())";
-                $stmt = $this->db->prepare($sql);
-                $stmt->execute([
-                    $taskId, $img['path'], $img['name'], $fileSizeBytes, $observaciones, $userId
-                ]);
-                
-                $evidenciaId = (int)$this->db->lastInsertId();
-                $evidenciaIds[] = $evidenciaId;
-
+                // Insertar en evidencia_imagenes vinculada al task_evidencia
                 $sqlImg = "INSERT INTO evidencia_imagenes (
                             task_evidencia_id, file_path, file_name, file_size_kb, mime_type, uploaded_at
                         ) VALUES (?, ?, ?, ?, ?, NOW())";
                 $stmtImg = $this->db->prepare($sqlImg);
-                $stmtImg->execute([$evidenciaId, $img['path'], $img['name'], $fileSizeKb, $img['type']]);
+                $stmtImg->execute([$taskEvidenciaId, $img['path'], $img['name'], $fileSizeKb, $img['type']]);
+                
+                $imagenesGuardadas[] = [
+                    'file_path' => $img['path'],
+                    'file_name' => $img['name'],
+                    'file_size_kb' => $fileSizeKb
+                ];
             }
 
             $this->db->commit();
-            return $evidenciaIds;
+            return $taskEvidenciaId;
 
         } catch (Exception $e) {
             $this->db->rollBack();

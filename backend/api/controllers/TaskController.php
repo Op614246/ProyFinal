@@ -114,17 +114,21 @@ class TaskController
         try {
             $request = $this->app->request();
 
-            // Construir filtros desde query params
+            // Construir filtros desde query params (GET parameters)
             $filtros = array_filter([
-                'fecha' => $request->get('fecha'),
-                'status' => $request->get('status'),
-                'sucursal_id' => $request->get('sucursal_id'),
-                'categoria_id' => $request->get('categoria_id'),
-                'assigned_user_id' => $request->get('assigned_user_id'),
-                'sin_asignar' => $request->get('sin_asignar') === 'true' ? true : null
+                'fecha' => $_GET['fecha'] ?? null,
+                'fecha_inicio' => $_GET['fecha_inicio'] ?? null,
+                'fecha_fin' => $_GET['fecha_fin'] ?? null,
+                'status' => $_GET['status'] ?? null,
+                'sucursal_id' => $_GET['sucursal_id'] ?? null,
+                'categoria_id' => $_GET['categoria_id'] ?? null,
+                'assigned_user_id' => $_GET['assigned_user_id'] ?? null,
+                'sin_asignar' => ($_GET['sin_asignar'] ?? null) === 'true' ? true : null
             ], function ($v) {
-                return $v !== null;
+                return $v !== null && $v !== '';
             });
+
+            Logger::debug('getAllTareasAdmin filtros recibidos', $filtros);
 
             $tareas = $this->repository->getTareasConFiltros($filtros);
 
@@ -187,6 +191,9 @@ class TaskController
 
             Logger::info('Tarea creada', ['id' => $taskId, 'user_id' => $userId]);
             return $this->success($tarea, 'Tarea creada correctamente', 201);
+        } catch (InvalidArgumentException $e) {
+            Logger::warning('Error de validación al crear tarea', ['error' => $e->getMessage()]);
+            return $this->validationError($e->getMessage());
         } catch (Exception $e) {
             Logger::error('Error al crear tarea', ['error' => $e->getMessage()]);
             return $this->serverError('Error al crear tarea');
@@ -203,6 +210,9 @@ class TaskController
 
             Logger::info('Tarea actualizada', ['id' => $taskId]);
             return $this->success($tarea, 'Tarea actualizada correctamente');
+        } catch (InvalidArgumentException $e) {
+            Logger::warning('Error de validación al actualizar tarea', ['error' => $e->getMessage()]);
+            return $this->validationError($e->getMessage());
         } catch (Exception $e) {
             Logger::error('Error al actualizar tarea', ['error' => $e->getMessage()]);
             return $this->serverError('Error al actualizar tarea');

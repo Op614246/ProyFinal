@@ -7,11 +7,6 @@ import { CryptoService } from './crypto.service';
 import { TokenService } from './token.service';
 import { ApiResponse, EncryptedResponse, AuthUser } from '../models/auth';
 
-/**
- * AuthService
- * 
- * Servicio de autenticación con encriptación AES-256
- */
 @Injectable({
   providedIn: 'root'
 })

@@ -79,7 +79,7 @@ class TaskConfig
     ];
 
     const UPLOAD_DIR = __DIR__ . '/../uploads/evidencias/';
-    const UPLOAD_PATH_RELATIVE = 'uploads/evidencias/';
+    const UPLOAD_PATH_RELATIVE = 'api/uploads/evidencias/';
 
     const DEFAULT_DEADLINE_DAYS = 2;
     const AUTO_INACTIVE_DAYS = 1;
