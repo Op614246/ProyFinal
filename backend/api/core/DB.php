@@ -25,7 +25,7 @@ class DB
             ));
 
         } catch (Exception $er) {
-            error_log("DB Connection Error: " . $er->getMessage());
+            error_log("DB Connection Error");
             
             header('Content-Type: application/json; charset=utf-8');
             http_response_code(500);

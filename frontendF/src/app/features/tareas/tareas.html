@@ -25,17 +25,17 @@
         <fa-icon [icon]="faPlus" slot="start" class="text-primary"></fa-icon>
         <ion-label>Crear Nueva Tarea</ion-label>
       </ion-item>
-      
+
       <ion-item button *ngIf="isAdmin">
         <fa-icon [icon]="faTasks" slot="start" class="text-primary"></fa-icon>
         <ion-label>Actividades</ion-label>
       </ion-item>
-      
+
       <ion-item button>
         <fa-icon [icon]="faListCheck" slot="start" class="text-primary"></fa-icon>
         <ion-label>Mis Tareas</ion-label>
       </ion-item>
-      
+
       <ion-item button>
         <fa-icon [icon]="faCalendar" slot="start" class="text-primary"></fa-icon>
         <ion-label>Calendario</ion-label>
@@ -86,39 +86,55 @@
 
   <!-- Contenido principal -->
   <div *ngIf="!cargando && !error" class="px-3 pb-4">
-    
     <!-- Selector de fecha con calendario -->
     <div class="py-3">
       <div class="flex items-center justify-between mb-2">
         <!-- Botón de fecha que abre calendario -->
-        <div class="flex items-center gap-2 bg-gray-100 px-3 py-2 rounded-lg cursor-pointer relative" 
-             (click)="toggleCalendarioCompleto()">
+        <div
+          class="flex items-center gap-2 bg-gray-100 px-3 py-2 rounded-lg cursor-pointer relative"
+          (click)="toggleCalendarioCompleto()"
+        >
           <fa-icon [icon]="faCalendar" class="text-primary"></fa-icon>
           <span class="font-medium">{{ diaString }}</span>
-          <fa-icon [icon]="mostrarCalendarioCompleto ? faChevronUp : faChevronDown" class="text-gray-500 text-xs"></fa-icon>
+          <fa-icon
+            [icon]="mostrarCalendarioCompleto ? faChevronUp : faChevronDown"
+            class="text-gray-500 text-xs"
+          ></fa-icon>
         </div>
-        
+
         <!-- Toggle filtrar por fecha -->
         <div class="flex items-center gap-2">
           <span class="text-xs text-gray-500">Filtrar fecha</span>
-          <ion-toggle [(ngModel)]="filtrarPorFecha" 
-                      (ionChange)="onFiltrarPorFechaChange()" 
-                      mode="ios" 
-                      class="scale-75"></ion-toggle>
+          <ion-toggle
+            [(ngModel)]="filtrarPorFecha"
+            (ionChange)="onFiltrarPorFechaChange()"
+            mode="ios"
+            class="scale-75"
+          ></ion-toggle>
         </div>
-        
+
         <!-- Toggle calendario semanal -->
-        <button class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-lg" (click)="toggleCalendario()">
-          <fa-icon [icon]="verCalendario ? faChevronUp : faChevronDown" class="text-gray-600"></fa-icon>
+        <button
+          class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-lg"
+          (click)="toggleCalendario()"
+        >
+          <fa-icon
+            [icon]="verCalendario ? faChevronUp : faChevronDown"
+            class="text-gray-600"
+          ></fa-icon>
         </button>
       </div>
 
       <!-- Calendario popup completo - Modal Style -->
-      <div *ngIf="mostrarCalendarioCompleto" 
-           class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-           (click)="toggleCalendarioCompleto()">
-        <div class="bg-white rounded-2xl shadow-2xl mx-4 max-w-sm w-full overflow-hidden"
-             (click)="$event.stopPropagation()">
+      <div
+        *ngIf="mostrarCalendarioCompleto"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+        (click)="toggleCalendarioCompleto()"
+      >
+        <div
+          class="bg-white rounded-2xl shadow-2xl mx-4 max-w-sm w-full overflow-hidden"
+          (click)="$event.stopPropagation()"
+        >
           <div class="bg-primary text-white px-4 py-3 flex items-center justify-between">
             <span class="font-semibold">Seleccionar Fecha</span>
             <button (click)="toggleCalendarioCompleto()" class="p-1 hover:bg-white/20 rounded">
@@ -143,31 +159,40 @@
       </div>
 
       <!-- Vista de semana -->
-      <div *ngIf="verCalendario" class="flex items-center border-b border-gray-200 pb-2">
+      @if(verCalendario) {
+      <div class="flex items-center border-b border-gray-200 pb-2">
         <ion-button fill="clear" size="small" (click)="verSemanaAnterior()">
           <fa-icon [icon]="faAngleLeft" class="text-xl"></fa-icon>
         </ion-button>
 
         <div class="grid grid-cols-7 gap-1 flex-1">
-          <div *ngFor="let diaSemana of semana"
-               (click)="diaSemana.habilitado ? seleccionarDia(diaSemana.fecha) : null"
-               class="flex flex-col items-center p-1 rounded-lg cursor-pointer"
-               [ngClass]="{
-                 'bg-blue-100 border border-blue-500': isSameDay(diaSemana.fecha, dia),
-                 'hover:bg-gray-100': diaSemana.habilitado && !isSameDay(diaSemana.fecha, dia)
-               }">
-            <span class="text-[10px] text-gray-500 uppercase">{{ getDiaNombreCorto(diaSemana.fecha) }}</span>
-            <span class="text-sm font-bold" 
-                  [ngClass]="{'text-blue-600': isSameDay(diaSemana.fecha, dia)}">
+          @for (diaSemana of semana; track semana) {
+          <div
+            (click)="diaSemana.habilitado ? seleccionarDia(diaSemana.fecha) : null"
+            class="flex flex-col items-center p-1 rounded-lg cursor-pointer"
+            [ngClass]="{
+              'bg-blue-100 border border-blue-500': isSameDay(diaSemana.fecha, dia),
+              'hover:bg-gray-100': diaSemana.habilitado && !isSameDay(diaSemana.fecha, dia)
+            }"
+          >
+            <span class="text-[10px] text-gray-500 uppercase">{{
+              getDiaNombreCorto(diaSemana.fecha)
+            }}</span>
+            <span
+              class="text-sm font-bold"
+              [ngClass]="{ 'text-blue-600': isSameDay(diaSemana.fecha, dia) }"
+            >
               {{ diaSemana.fecha.getDate() }}
             </span>
           </div>
+          }
         </div>
 
         <ion-button fill="clear" size="small" (click)="verSemanaSiguiente()">
           <fa-icon [icon]="faAngleRight" class="text-xl"></fa-icon>
         </ion-button>
       </div>
+      }
     </div>
 
     <!-- Tabs - Admin: Tareas y Tareas sin asignar -->
@@ -192,20 +217,21 @@
 
     <!-- Tab: Tareas Admin -->
     <div *ngIf="selectedTab === 'admin'" class="space-y-4">
-      
       <!-- Resumen estadístico -->
       <div class="grid grid-cols-3 gap-2 mb-4">
         <!-- Pendientes -->
         <div class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <div class="flex items-center justify-between mb-1">
-            <span class="text-xl font-bold text-gray-800">{{ resumen.totalTareas - resumen.tareasCompletadas - resumen.tareasEnProgreso }}</span>
+            <span class="text-xl font-bold text-gray-800">{{
+              resumen.totalTareas - resumen.tareasCompletadas - resumen.tareasEnProgreso
+            }}</span>
             <div class="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center">
               <fa-icon [icon]="faClock" class="text-yellow-500 text-xs"></fa-icon>
             </div>
           </div>
           <span class="text-[10px] text-gray-500 uppercase font-medium">Pendientes</span>
         </div>
-        
+
         <!-- En proceso -->
         <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <div class="flex items-center justify-between mb-1">
@@ -216,7 +242,7 @@
           </div>
           <span class="text-[10px] text-gray-500 uppercase font-medium">En Proceso</span>
         </div>
-        
+
         <!-- Completadas -->
         <div class="p-3 bg-green-50 border border-green-200 rounded-lg">
           <div class="flex items-center justify-between mb-1">
@@ -240,29 +266,40 @@
 
       <!-- Barra de búsqueda -->
       <div class="flex gap-2">
-        <ion-searchbar 
+        <ion-searchbar
           [(ngModel)]="searchTerm"
           placeholder="Buscar tareas..."
           mode="ios"
-          class="!p-0 flex-1">
+          class="!p-0 flex-1"
+        >
         </ion-searchbar>
-        <button class="w-12 h-12 flex items-center justify-center border border-gray-300 rounded-lg">
+        <button
+          class="w-12 h-12 flex items-center justify-center border border-gray-300 rounded-lg"
+        >
           <fa-icon [icon]="faSliders" class="text-gray-600"></fa-icon>
         </button>
       </div>
 
       <!-- Filtros en fila -->
       <div class="flex gap-2">
-        <ion-select [(ngModel)]="filtroEstado" placeholder="Estado" interface="popover" 
-                    class="flex-1 border border-gray-300 rounded-lg text-sm">
+        <ion-select
+          [(ngModel)]="filtroEstado"
+          placeholder="Estado"
+          interface="popover"
+          class="flex-1 border border-gray-300 rounded-lg text-sm"
+        >
           <ion-select-option value="todos">Todos</ion-select-option>
           <ion-select-option value="Pendiente">Pendiente</ion-select-option>
           <ion-select-option value="En progreso">En Progreso</ion-select-option>
           <ion-select-option value="Completada">Completada</ion-select-option>
         </ion-select>
 
-        <ion-select [(ngModel)]="filtroCategoria" placeholder="Categoría" interface="popover"
-                    class="flex-1 border border-gray-300 rounded-lg text-sm">
+        <ion-select
+          [(ngModel)]="filtroCategoria"
+          placeholder="Categoría"
+          interface="popover"
+          class="flex-1 border border-gray-300 rounded-lg text-sm"
+        >
           <ion-select-option value="todos">Todas</ion-select-option>
           <ion-select-option *ngFor="let cat of obtenerCategorias()" [value]="cat">
             {{ cat }}
@@ -272,31 +309,39 @@
 
       <!-- Lista de tareas -->
       <div class="space-y-3">
-        <div *ngIf="obtenerTareasFiltradas().length === 0" class="text-center py-8 bg-gray-50 rounded-lg">
+        <div
+          *ngIf="obtenerTareasFiltradas().length === 0"
+          class="text-center py-8 bg-gray-50 rounded-lg"
+        >
           <fa-icon [icon]="faTasks" class="text-4xl text-gray-300 mb-2"></fa-icon>
           <p class="text-gray-500">No hay tareas para mostrar</p>
         </div>
 
         <!-- Card de tarea -->
-        <div *ngFor="let tarea of obtenerTareasFiltradas()" 
-             class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer"
-             (click)="irAInfoTarea(tarea)">
-          
+        <div
+          *ngFor="let tarea of obtenerTareasFiltradas()"
+          class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer"
+          (click)="irAInfoTarea(tarea)"
+        >
           <!-- Header con badge de estado -->
-          <div class="p-4 border-l-4" 
-               [ngClass]="{
-                 'border-yellow-500 bg-yellow-50': tarea.estado === 'Pendiente',
-                 'border-blue-500 bg-blue-50': tarea.estado === 'En progreso',
-                 'border-green-500 bg-green-50': tarea.estado === 'Completada'
-               }">
+          <div
+            class="p-4 border-l-4"
+            [ngClass]="{
+              'border-yellow-500 bg-yellow-50': tarea.estado === 'Pendiente',
+              'border-blue-500 bg-blue-50': tarea.estado === 'En progreso',
+              'border-green-500 bg-green-50': tarea.estado === 'Completada'
+            }"
+          >
             <div class="flex justify-between items-start">
               <h3 class="font-semibold text-sm text-gray-800 flex-1 pr-2">{{ tarea.titulo }}</h3>
-              <span class="px-2 py-1 text-[10px] font-medium rounded-full whitespace-nowrap"
-                    [ngClass]="{
-                      'bg-yellow-500 text-white': tarea.estado === 'Pendiente',
-                      'bg-blue-500 text-white': tarea.estado === 'En progreso',
-                      'bg-green-500 text-white': tarea.estado === 'Completada'
-                    }">
+              <span
+                class="px-2 py-1 text-[10px] font-medium rounded-full whitespace-nowrap"
+                [ngClass]="{
+                  'bg-yellow-500 text-white': tarea.estado === 'Pendiente',
+                  'bg-blue-500 text-white': tarea.estado === 'En progreso',
+                  'bg-green-500 text-white': tarea.estado === 'Completada'
+                }"
+              >
                 {{ tarea.estado }}
               </span>
             </div>
@@ -305,17 +350,30 @@
           <!-- Info de la tarea -->
           <div class="p-4 space-y-2">
             <div class="grid grid-cols-2 gap-2 text-xs text-gray-600">
+              <!-- Fila 1: Fecha Asignación y Hora Inicio -->
               <div class="flex items-center gap-1">
-                <fa-icon [icon]="faClock" class="text-gray-400"></fa-icon>
-                <span>{{ tarea.horainicio }} - {{ tarea.horafin }}</span>
+                <fa-icon [icon]="faCalendar" class="text-green-400"></fa-icon>
+                <span>{{ tarea.fechaAsignacion }}</span>
               </div>
+              <div class="flex items-center gap-1">
+                <fa-icon [icon]="faClock" class="text-green-400"></fa-icon>
+                <span>{{ tarea.horainicio || '--:--' }}</span>
+              </div>
+
+              <!-- Fila 2: Fecha Límite y Hora Fin -->
+              <div class="flex items-center gap-1">
+                <fa-icon [icon]="faCalendar" class="text-red-400"></fa-icon>
+                <span>{{ tarea.fechaVencimiento || '--' }}</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <fa-icon [icon]="faClock" class="text-red-400"></fa-icon>
+                <span>{{ tarea.horafin || '--:--' }}</span>
+              </div>
+
+              <!-- Fila 3: Categoría y Subtareas -->
               <div class="flex items-center gap-1">
                 <fa-icon [icon]="faStore" class="text-gray-400"></fa-icon>
                 <span>{{ tarea.Categoria }}</span>
-              </div>
-              <div class="flex items-center gap-1">
-                <fa-icon [icon]="faCalendar" class="text-gray-400"></fa-icon>
-                <span>{{ tarea.fechaAsignacion }}</span>
               </div>
               <div class="flex items-center gap-1">
                 <fa-icon [icon]="faUsers" class="text-gray-400"></fa-icon>
@@ -327,26 +385,45 @@
             <div class="pt-2">
               <div class="flex justify-between text-xs mb-1">
                 <span class="text-gray-500">Progreso</span>
-                <span class="font-semibold text-primary">{{ obtenerPorcentajeSubtareas(tarea) }}%</span>
+                <span class="font-semibold text-primary"
+                  >{{ obtenerPorcentajeSubtareas(tarea) }}%</span
+                >
               </div>
-              <div class="w-full bg-gray-200 rounded-full h-2">
-                <div class="bg-primary h-2 rounded-full transition-all" 
-                     [style.width.%]="obtenerPorcentajeSubtareas(tarea)"></div>
+              <div class="w-full bg-gray-200 rounded-full h-2 mb-1">
+                <div
+                  class="bg-primary h-2 rounded-full transition-all"
+                  [style.width]="obtenerPorcentajeSubtareas(tarea) + '%'"
+                ></div>
               </div>
+              <p class="text-[10px] text-gray-400 text-right">
+                {{ obtenerSubtareasCompletadas(tarea) }} de
+                {{ obtenerTotalSubtareas(tarea) }} subtareas
+              </p>
             </div>
 
             <!-- Preview de subtareas -->
             <div class="pt-2 border-t border-gray-100 mt-2">
               <p class="text-[10px] font-semibold text-gray-500 mb-1">Subtareas:</p>
-              <div *ngFor="let subtarea of (tarea.Tarea || []).slice(0, 2)" class="flex items-center gap-2 text-xs py-0.5">
-                <fa-icon [icon]="faCheck" 
-                         [ngClass]="{'text-green-500': subtarea.completada, 'text-gray-300': !subtarea.completada}">
+              <div
+                *ngFor="let subtarea of (tarea.Tarea || []).slice(0, 2)"
+                class="flex items-center gap-2 text-xs py-0.5"
+              >
+                <fa-icon
+                  [icon]="faCheck"
+                  [ngClass]="{
+                    'text-green-500': subtarea.completada,
+                    'text-gray-300': !subtarea.completada
+                  }"
+                >
                 </fa-icon>
-                <span [ngClass]="{'line-through text-gray-400': subtarea.completada}">
+                <span [ngClass]="{ 'line-through text-gray-400': subtarea.completada }">
                   {{ subtarea.titulo }}
                 </span>
               </div>
-              <p *ngIf="tarea.Tarea && tarea.Tarea.length > 2" class="text-[10px] text-blue-600 mt-1">
+              <p
+                *ngIf="tarea.Tarea && tarea.Tarea.length > 2"
+                class="text-[10px] text-blue-600 mt-1"
+              >
                 +{{ tarea.Tarea.length - 2 }} más
               </p>
             </div>
@@ -354,29 +431,38 @@
             <!-- Botones de acción -->
             <div class="pt-3 border-t border-gray-100 mt-2 flex gap-2">
               <!-- Ver detalles -->
-              <ion-button fill="outline" size="small" class="flex-1" (click)="irAInfoTarea(tarea, $event)">
+              <ion-button
+                fill="outline"
+                size="small"
+                class="flex-1"
+                (click)="irAInfoTarea(tarea, $event)"
+              >
                 <fa-icon [icon]="faSliders" class="mr-1"></fa-icon>
                 <span class="text-xs">Ver</span>
               </ion-button>
 
               <!-- Si está completada: Reaperturar -->
-              <ion-button *ngIf="tarea.estado === 'Completada'" 
-                          fill="outline" 
-                          color="warning" 
-                          size="small" 
-                          class="flex-1" 
-                          (click)="mostrarOpcionesTareaCompletada(tarea); $event.stopPropagation()">
+              <ion-button
+                *ngIf="tarea.estado === 'Completada'"
+                fill="outline"
+                color="warning"
+                size="small"
+                class="flex-1"
+                (click)="mostrarOpcionesTareaCompletada(tarea); $event.stopPropagation()"
+              >
                 <fa-icon [icon]="faRotateLeft" class="mr-1"></fa-icon>
                 <span class="text-xs">Reabrir</span>
               </ion-button>
 
               <!-- Si NO está completada: Completar -->
-              <ion-button *ngIf="tarea.estado !== 'Completada'" 
-                          fill="solid" 
-                          color="success" 
-                          size="small" 
-                          class="flex-1" 
-                          (click)="abrirModalCompletar(tarea, $event)">
+              <ion-button
+                *ngIf="tarea.estado !== 'Completada'"
+                fill="solid"
+                color="success"
+                size="small"
+                class="flex-1"
+                (click)="abrirModalCompletar(tarea, $event)"
+              >
                 <fa-icon [icon]="faCheck" class="mr-1"></fa-icon>
                 <span class="text-xs">Completar</span>
               </ion-button>
@@ -388,12 +474,13 @@
 
     <!-- Tab: Mis Tareas (para usuarios) -->
     <div *ngIf="selectedTab === 'mis-tareas' && !isAdmin" class="space-y-4">
-      
       <!-- Resumen estadístico usuario -->
       <div class="grid grid-cols-3 gap-2 mb-4">
         <div class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <div class="flex items-center justify-between mb-1">
-            <span class="text-xl font-bold text-gray-800">{{ resumen.totalTareas - resumen.tareasCompletadas - resumen.tareasEnProgreso }}</span>
+            <span class="text-xl font-bold text-gray-800">{{
+              resumen.totalTareas - resumen.tareasCompletadas - resumen.tareasEnProgreso
+            }}</span>
             <div class="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center">
               <fa-icon [icon]="faClock" class="text-yellow-500 text-xs"></fa-icon>
             </div>
@@ -435,49 +522,108 @@
 
       <!-- Lista de tareas del usuario -->
       <div class="space-y-3">
-        <div *ngFor="let tarea of misTareas" 
-             class="bg-white rounded-xl shadow-sm border overflow-hidden cursor-pointer"
-             (click)="irAInfoTarea(tarea)"
-             [ngClass]="{
-               'border-l-4 border-l-yellow-500': tarea.estado === 'Pendiente',
-               'border-l-4 border-l-blue-500': tarea.estado === 'En progreso',
-               'border-l-4 border-l-green-500 opacity-70': tarea.estado === 'Completada'
-             }">
-          
+        <div
+          *ngFor="let tarea of misTareas"
+          class="bg-white rounded-xl shadow-sm border overflow-hidden cursor-pointer"
+          (click)="irAInfoTarea(tarea)"
+          [ngClass]="{
+            'border-l-4 border-l-yellow-500': tarea.estado === 'Pendiente',
+            'border-l-4 border-l-blue-500': tarea.estado === 'En progreso',
+            'border-l-4 border-l-green-500 opacity-70': tarea.estado === 'Completada'
+          }"
+        >
           <div class="p-4">
             <!-- Título y estado -->
             <div class="flex justify-between items-start mb-2">
               <h3 class="font-semibold text-sm text-gray-800 flex-1 pr-2">{{ tarea.titulo }}</h3>
-              <span class="px-2 py-1 text-[10px] font-medium rounded-full whitespace-nowrap"
-                    [ngClass]="{
-                      'bg-yellow-500 text-white': tarea.estado === 'Pendiente',
-                      'bg-blue-500 text-white': tarea.estado === 'En progreso',
-                      'bg-green-500 text-white': tarea.estado === 'Completada'
-                    }">
+              <span
+                class="px-2 py-1 text-[10px] font-medium rounded-full whitespace-nowrap"
+                [ngClass]="{
+                  'bg-yellow-500 text-white': tarea.estado === 'Pendiente',
+                  'bg-blue-500 text-white': tarea.estado === 'En progreso',
+                  'bg-green-500 text-white': tarea.estado === 'Completada'
+                }"
+              >
                 {{ tarea.estado }}
               </span>
             </div>
 
-            <!-- Info -->
+            <!-- Info de fechas y horas -->
             <div class="grid grid-cols-2 gap-2 text-xs text-gray-600 mb-3">
+              <!-- Fila 1: Fecha Asignación y Hora Inicio -->
               <div class="flex items-center gap-1">
-                <fa-icon [icon]="faClock" class="text-gray-400"></fa-icon>
-                <span>{{ tarea.horainicio || '--:--' }} - {{ tarea.horafin || '--:--' }}</span>
+                <fa-icon [icon]="faCalendar" class="text-green-400"></fa-icon>
+                <span>{{ tarea.fechaAsignacion }}</span>
               </div>
+              <div class="flex items-center gap-1">
+                <fa-icon [icon]="faClock" class="text-green-400"></fa-icon>
+                <span>{{ tarea.horainicio || '--:--' }}</span>
+              </div>
+
+              <!-- Fila 2: Fecha Límite y Hora Fin -->
+              <div class="flex items-center gap-1">
+                <fa-icon [icon]="faCalendar" class="text-red-400"></fa-icon>
+                <span>{{ tarea.fechaVencimiento || '--' }}</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <fa-icon [icon]="faClock" class="text-red-400"></fa-icon>
+                <span>{{ tarea.horafin || '--:--' }}</span>
+              </div>
+
+              <!-- Fila 3: Categoría -->
               <div class="flex items-center gap-1">
                 <fa-icon [icon]="faLayerGroup" class="text-gray-400"></fa-icon>
                 <span>{{ tarea.Categoria }}</span>
               </div>
             </div>
 
+            <!-- Barra de progreso -->
+            <div class="pt-2 mb-3">
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-gray-500">Progreso</span>
+                <span class="font-semibold text-primary"
+                  >{{ obtenerPorcentajeSubtareas(tarea) }}%</span
+                >
+              </div>
+              <div class="w-full bg-gray-200 rounded-full h-2 mb-1">
+                <div
+                  class="bg-primary h-2 rounded-full transition-all"
+                  [style.width]="obtenerPorcentajeSubtareas(tarea) + '%'"
+                ></div>
+              </div>
+              <p class="text-[10px] text-gray-400 text-right">
+                {{ obtenerSubtareasCompletadas(tarea) }} de
+                {{ obtenerTotalSubtareas(tarea) }} subtareas
+              </p>
+            </div>
+
+            <!-- Preview de subtareas -->
+            <div
+              *ngIf="tarea.Tarea && tarea.Tarea.length > 0"
+              class="pt-2 border-t border-gray-100 mb-2"
+            >
+              <p class="text-[10px] font-semibold text-gray-500 mb-1">Subtareas:</p>
+              <div *ngFor="let subtarea of (tarea.Tarea || []).slice(0, 2)" class="text-xs py-0.5">
+                <span>{{ subtarea.titulo }}</span>
+              </div>
+              <p
+                *ngIf="tarea.Tarea && tarea.Tarea.length > 2"
+                class="text-[10px] text-blue-600 mt-1"
+              >
+                +{{ tarea.Tarea.length - 2 }} más
+              </p>
+            </div>
+
             <!-- Prioridad (si tiene subtareas) -->
             <div *ngIf="tarea.Tarea && tarea.Tarea.length > 0" class="flex items-center gap-2 mb-3">
-              <span class="px-2 py-0.5 text-[10px] rounded-full"
-                    [ngClass]="{
-                      'bg-red-100 text-red-600': tarea.Tarea[0].Prioridad === 'Alta',
-                      'bg-yellow-100 text-yellow-600': tarea.Tarea[0].Prioridad === 'Media',
-                      'bg-green-100 text-green-600': tarea.Tarea[0].Prioridad === 'Baja'
-                    }">
+              <span
+                class="px-2 py-0.5 text-[10px] rounded-full"
+                [ngClass]="{
+                  'bg-red-100 text-red-600': tarea.Tarea[0].Prioridad === 'Alta',
+                  'bg-yellow-100 text-yellow-600': tarea.Tarea[0].Prioridad === 'Media',
+                  'bg-green-100 text-green-600': tarea.Tarea[0].Prioridad === 'Baja'
+                }"
+              >
                 <fa-icon [icon]="faFlag" class="mr-1"></fa-icon>
                 {{ tarea.Tarea[0].Prioridad }}
               </span>
@@ -486,23 +632,27 @@
             <!-- Botones de acción según estado -->
             <div class="pt-3 border-t border-gray-100 flex gap-2">
               <!-- Botón Iniciar (solo si está Pendiente) -->
-              <ion-button *ngIf="tarea.estado === 'Pendiente'" 
-                          fill="solid" 
-                          color="primary" 
-                          size="small" 
-                          class="flex-1"
-                          (click)="iniciarTarea(tarea, $event)">
+              <ion-button
+                *ngIf="tarea.estado === 'Pendiente'"
+                fill="solid"
+                color="primary"
+                size="small"
+                class="flex-1"
+                (click)="iniciarTarea(tarea, $event)"
+              >
                 <fa-icon [icon]="faSpinner" class="mr-1"></fa-icon>
                 <span class="text-xs">Iniciar</span>
               </ion-button>
 
               <!-- Botón Finalizar (solo si está En progreso) -->
-              <ion-button *ngIf="tarea.estado === 'En progreso'" 
-                          fill="solid" 
-                          color="success" 
-                          size="small" 
-                          class="flex-1"
-                          (click)="finalizarTarea(tarea, $event)">
+              <ion-button
+                *ngIf="tarea.estado === 'En progreso'"
+                fill="solid"
+                color="success"
+                size="small"
+                class="flex-1"
+                (click)="finalizarTarea(tarea, $event)"
+              >
                 <fa-icon [icon]="faCheck" class="mr-1"></fa-icon>
                 <span class="text-xs">Finalizar</span>
               </ion-button>
@@ -519,7 +669,6 @@
 
     <!-- Tab: Tareas sin asignar (usuarios y admin) -->
     <div *ngIf="selectedTab === 'sin-asignar'" class="space-y-4">
-      
       <!-- Título -->
       <div class="flex justify-between items-center">
         <span class="text-sm font-semibold">Tareas disponibles hoy</span>
@@ -535,18 +684,36 @@
 
       <!-- Lista de tareas sin asignar -->
       <div class="space-y-3">
-           <div *ngFor="let tarea of tareasSinAsignar" 
-             class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 cursor-pointer"
-             [ngClass]="{'ring-2 ring-primary bg-blue-50': isTareaSeleccionada(tarea.id)}">
-          
+        <div
+          *ngFor="let tarea of tareasSinAsignar"
+          class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 cursor-pointer"
+          [ngClass]="{ 'ring-2 ring-primary bg-blue-50': isTareaSeleccionada(tarea.id) }"
+        >
           <div class="flex justify-between items-start" (click)="irAInfoTarea(tarea, $event)">
             <div class="flex-1">
               <h3 class="font-semibold text-sm text-gray-800 mb-2">{{ tarea.titulo }}</h3>
               <div class="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                <!-- Fila 1: Fecha Asignación y Hora Inicio -->
                 <div class="flex items-center gap-1">
-                  <fa-icon [icon]="faClock" class="text-gray-400"></fa-icon>
+                  <fa-icon [icon]="faCalendar" class="text-green-400"></fa-icon>
+                  <span>{{ tarea.fechaAsignacion }}</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <fa-icon [icon]="faClock" class="text-green-400"></fa-icon>
                   <span>{{ tarea.horainicio || '--:--' }}</span>
                 </div>
+
+                <!-- Fila 2: Fecha Límite y Hora Fin -->
+                <div class="flex items-center gap-1">
+                  <fa-icon [icon]="faCalendar" class="text-red-400"></fa-icon>
+                  <span>{{ tarea.fechaVencimiento || '--' }}</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <fa-icon [icon]="faClock" class="text-red-400"></fa-icon>
+                  <span>{{ tarea.horafin || '--:--' }}</span>
+                </div>
+
+                <!-- Fila 3: Categoría y Sucursal -->
                 <div class="flex items-center gap-1">
                   <fa-icon [icon]="faLayerGroup" class="text-gray-400"></fa-icon>
                   <span>{{ tarea.Categoria }}</span>
@@ -556,27 +723,75 @@
                   <span>{{ tarea.sucursal }}</span>
                 </div>
               </div>
+
+              <!-- Barra de progreso -->
+              <div class="pt-2 mb-2">
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-gray-500">Progreso</span>
+                  <span class="font-semibold text-primary"
+                    >{{ obtenerPorcentajeSubtareas(tarea) }}%</span
+                  >
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2 mb-1">
+                  <div
+                    class="bg-primary h-2 rounded-full transition-all"
+                    [style.width]="obtenerPorcentajeSubtareas(tarea) + '%'"
+                  ></div>
+                </div>
+                <p class="text-[10px] text-gray-400 text-right">
+                  {{ obtenerSubtareasCompletadas(tarea) }} de
+                  {{ obtenerTotalSubtareas(tarea) }} subtareas
+                </p>
+              </div>
+
+              <!-- Preview de subtareas -->
+              <div
+                *ngIf="tarea.Tarea && tarea.Tarea.length > 0"
+                class="pt-2 border-t border-gray-100"
+              >
+                <p class="text-[10px] font-semibold text-gray-500 mb-1">Subtareas:</p>
+                <div
+                  *ngFor="let subtarea of (tarea.Tarea || []).slice(0, 2)"
+                  class="text-xs py-0.5"
+                >
+                  <span>{{ subtarea.titulo }}</span>
+                </div>
+                <p
+                  *ngIf="tarea.Tarea && tarea.Tarea.length > 2"
+                  class="text-[10px] text-blue-600 mt-1"
+                >
+                  +{{ tarea.Tarea.length - 2 }} más
+                </p>
+              </div>
             </div>
 
             <!-- Checkbox visual -->
-            <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center ml-3"
-                 [ngClass]="{
-                   'bg-primary border-primary': isTareaSeleccionada(tarea.id),
-                   'border-gray-300': !isTareaSeleccionada(tarea.id)
-                 }"
-                 (click)="toggleSeleccionTarea(tarea.id, $event)">
-              <fa-icon *ngIf="isTareaSeleccionada(tarea.id)" [icon]="faCheck" class="text-white text-xs"></fa-icon>
+            <div
+              class="w-6 h-6 rounded-full border-2 flex items-center justify-center ml-3"
+              [ngClass]="{
+                'bg-primary border-primary': isTareaSeleccionada(tarea.id),
+                'border-gray-300': !isTareaSeleccionada(tarea.id)
+              }"
+              (click)="toggleSeleccionTarea(tarea.id, $event)"
+            >
+              <fa-icon
+                *ngIf="isTareaSeleccionada(tarea.id)"
+                [icon]="faCheck"
+                class="text-white text-xs"
+              ></fa-icon>
             </div>
           </div>
         </div>
       </div>
     </div>
-
   </div>
 </ion-content>
 
 <!-- Botón fijo para añadir tareas (solo en tab sin-asignar para usuarios) -->
-<ion-footer class="p-4 bg-white shadow-lg" *ngIf="selectedTab === 'sin-asignar' && !isAdmin && tareasSeleccionadas.size > 0">
+<ion-footer
+  class="p-4 bg-white shadow-lg"
+  *ngIf="selectedTab === 'sin-asignar' && !isAdmin && tareasSeleccionadas.size > 0"
+>
   <ion-button expand="block" (click)="asignarTareasSeleccionadas()">
     Añadir {{ tareasSeleccionadas.size }} tarea(s) a mi lista
   </ion-button>

@@ -3,4 +3,5 @@
 /backend/api/logs/
 *.log
 
-/backend/test/
+/backend/api/uploads/evidencias/
+*.*

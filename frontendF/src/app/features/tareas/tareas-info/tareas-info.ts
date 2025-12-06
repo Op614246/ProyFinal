@@ -3,7 +3,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ActivatedRoute, Router } from '@angular/router';
-import { faFlag, faSliders, faPlus, faPencil, faTrash } from '@fortawesome/pro-regular-svg-icons';
+import { faFlag, faSliders, faPlus, faPencil, faTrash, faArrowLeft } from '@fortawesome/pro-regular-svg-icons';
 import { ModalController, ToastController, AlertController } from '@ionic/angular';
 import { environment } from '../../../../environments/environment';
 import { ModalForm } from '../modal-form/modal-form';
@@ -40,6 +40,7 @@ export class TareasInfo implements OnInit {
   public faPlus = faPlus;
   public faPencil = faPencil;
   public faTrash = faTrash;
+  public faArrowLeft = faArrowLeft;
 
   // Getter para acceder a apartadoadmin del servicio
   get isApartadoAdmin(): boolean {
@@ -66,18 +67,40 @@ export class TareasInfo implements OnInit {
     return `${baseUrl}/${path}`;
   }
 
-  // Parsear la propiedad imagenes que puede ser string JSON, lista separada o una sola ruta
+  // Parsear la propiedad imagenes que puede ser string JSON, lista separada, array de strings o array de objetos
   parseImagenes(imagenes: any): string[] {
     if (!imagenes) return [];
-    if (Array.isArray(imagenes)) return imagenes;
+    
+    // Si es un array
+    if (Array.isArray(imagenes)) {
+      return imagenes.map(img => {
+        // Si es un objeto con propiedades file_path o path
+        if (typeof img === 'object' && img !== null) {
+          return img.file_path || img.path || '';
+        }
+        // Si es un string
+        return img;
+      }).filter(Boolean);
+    }
+    
+    // Si es un string
     if (typeof imagenes === 'string') {
       const trimmed = imagenes.trim();
       // Intentar parsear JSON
       if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
         try {
           const parsed = JSON.parse(trimmed);
-          if (Array.isArray(parsed)) return parsed;
-          if (parsed && typeof parsed === 'object') return [parsed];
+          if (Array.isArray(parsed)) {
+            return parsed.map(img => {
+              if (typeof img === 'object' && img !== null) {
+                return img.file_path || img.path || '';
+              }
+              return img;
+            }).filter(Boolean);
+          }
+          if (parsed && typeof parsed === 'object') {
+            return [parsed.file_path || parsed.path || ''];
+          }
         } catch (e) {
           // no JSON
         }
@@ -87,6 +110,7 @@ export class TareasInfo implements OnInit {
       if (trimmed.includes(',')) return trimmed.split(',').map(s => s.trim()).filter(Boolean);
       return [trimmed];
     }
+    
     return [];
   }
 
@@ -396,8 +420,8 @@ export class TareasInfo implements OnInit {
 
     const modal = await this.modalController.create({
       component: ModalReaperturar,
-      initialBreakpoint: 0.85,
-      breakpoints: [0, 0.85, 1],
+      initialBreakpoint: 1,
+      breakpoints: [0, 1, 1],
       componentProps: {
         tarea: this.tareaAdminSeleccionada
       }
@@ -550,8 +574,8 @@ export class TareasInfo implements OnInit {
 
     const modal = await this.modalController.create({
       component: ModalCrearSubtarea,
-      breakpoints: [0, 0.75, 0.9, 1],
-      initialBreakpoint: 0.9,
+      breakpoints: [0, 1, 1, 1],
+      initialBreakpoint: 1,
       componentProps: {
         taskId: this.tareaAdminSeleccionada.id,
         taskTitulo: this.tareaAdminSeleccionada.titulo
@@ -749,8 +773,8 @@ export class TareasInfo implements OnInit {
       componentProps: {
         tarea: this.tareaAdminSeleccionada
       },
-      breakpoints: [0, 0.5, 0.85, 1],
-      initialBreakpoint: 0.85
+      breakpoints: [0, 1, 1, 1],
+      initialBreakpoint: 1
     });
 
     modal.onDidDismiss().then((result) => {
@@ -762,14 +786,27 @@ export class TareasInfo implements OnInit {
           .subscribe({
             next: (response: any) => {
               if (response.tipo === 1) {
-                this.tareaAdminSeleccionada!.estado = 'Completada';
-                this.tareaAdminSeleccionada!.completada = true;
-                this.tareaAdminSeleccionada!.observaciones = datos.observaciones;
-                this.tareaAdminSeleccionada!.imagenes = datos.imagenes || this.tareaAdminSeleccionada!.imagenes;
-                this.tareaAdminSeleccionada!.fechaCompletado = datos.fechaCompletado || new Date().toISOString();
-                this.mostrarToast('Tarea finalizada exitosamente', 'success');
-                this.tareasService.notificarActualizacion();
-                try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+                // Recargar la tarea completa para obtener las imágenes guardadas
+                this.tareasService.getTaskById(parseInt(this.tareaAdminSeleccionada!.id)).subscribe({
+                  next: (tareaActualizada: any) => {
+                    if (tareaActualizada.tipo === 1 && tareaActualizada.data) {
+                      this.tareaAdminSeleccionada = tareaActualizada.data;
+                      this.mostrarToast('Tarea finalizada exitosamente', 'success');
+                      this.tareasService.notificarActualizacion();
+                      try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+                    }
+                  },
+                  error: (err: any) => {
+                    console.error('Error al recargar tarea:', err);
+                    // Aun así actualizar el estado local
+                    this.tareaAdminSeleccionada!.estado = 'Completada';
+                    this.tareaAdminSeleccionada!.completada = true;
+                    this.tareaAdminSeleccionada!.observaciones = datos.observaciones;
+                    this.mostrarToast('Tarea finalizada (intenta recargar la página para ver las imágenes)', 'success');
+                    this.tareasService.notificarActualizacion();
+                    try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+                  }
+                });
               } else {
                 this.mostrarToast(response.mensajes?.[0] || 'Error al finalizar tarea', 'danger');
               }

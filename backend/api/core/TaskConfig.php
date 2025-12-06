@@ -60,6 +60,7 @@ class TaskConfig
     const MAX_FILE_SIZE_BYTES = 1572864;
 
     const ALLOWED_MIME_TYPES = [
+        'image/jpg',
         'image/jpeg',
         'image/png',
         'image/gif',

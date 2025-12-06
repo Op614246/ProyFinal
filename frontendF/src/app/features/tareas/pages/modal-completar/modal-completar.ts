@@ -2,6 +2,7 @@ import { Component, Input, OnInit, ChangeDetectorRef } from '@angular/core';
 import { faCamera, faCheck, faImage, faXmark, faTrash, faExclamationTriangle } from '@fortawesome/pro-regular-svg-icons';
 import { ModalController, ToastController, ActionSheetController, AlertController } from '@ionic/angular';
 import { TareaAdmin, Tarea } from '../../service/tareas.service';
+import { DateUtilService } from '../../../../core/services/date-util.service';
 
 @Component({
   selector: 'app-modal-completar',
@@ -36,7 +37,8 @@ export class ModalCompletar implements OnInit {
     private toastController: ToastController,
     private actionSheetController: ActionSheetController,
     private alertController: AlertController,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private dateUtilService: DateUtilService
   ) {}
 
   ngOnInit() {}
@@ -183,12 +185,31 @@ export class ModalCompletar implements OnInit {
       return;
     }
 
+    // Validación: Si es una subtarea, verificar que la tarea padre esté en "En progreso"
+    if (this.subtarea && this.tarea) {
+      if (this.tarea.estado !== 'En progreso') {
+        const alert = await this.alertController.create({
+          header: 'No puedes completar esta subtarea',
+          message: `La tarea principal está en estado "${this.tarea.estado}". Debes iniciar la tarea primero para poder completar sus subtareas.`,
+          buttons: [
+            {
+              text: 'Entendido',
+              role: 'confirm'
+            }
+          ],
+          cssClass: 'alert-warning'
+        });
+        await alert.present();
+        return;
+      }
+    }
+
     const datosCompletado = {
       completada: true,
       observaciones: this.observaciones.trim(),
       imagenes: this.imagenes,
       imagenesArchivos: this.imagenesArchivos, // Todos los archivos
-      fechaCompletado: new Date().toISOString(),
+      fechaCompletado: this.dateUtilService.getNowISOString(),
       tareaId: this.tarea?.id,
       subtareaId: this.subtarea?.id
     };

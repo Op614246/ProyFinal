@@ -390,6 +390,17 @@ class TaskRepository
                 throw new InvalidArgumentException('La fecha de vencimiento no puede ser anterior a la fecha de asignación');
             }
 
+            // Validar que si es el mismo día, horafin >= horainicio
+            $horainicio = $data['horainicio'] ?? null;
+            $horafin = $data['horafin'] ?? null;
+            
+            if ($fechaAsignacion === $deadline && $horainicio && $horafin) {
+                if (strtotime($horafin) < strtotime($horainicio)) {
+                    $this->db->rollBack();
+                    throw new InvalidArgumentException('La hora de fin no puede ser anterior a la hora de inicio');
+                }
+            }
+
             $sql = "INSERT INTO tasks (
                         title, description, categoria_id, status, priority,
                         deadline, fecha_asignacion, horainicio, horafin,
@@ -411,8 +422,8 @@ class TaskRepository
                 ':priority' => $data['priority'] ?? 'medium',
                 ':deadline' => $deadline,
                 ':fecha_asignacion' => $fechaAsignacion,
-                ':horainicio' => $data['horainicio'] ?? null,
-                ':horafin' => $data['horafin'] ?? null,
+                ':horainicio' => $horainicio,
+                ':horafin' => $horafin,
                 ':assigned_user_id' => $data['assigned_user_id'] ?? null,
                 ':created_by_user_id' => $createdByUserId,
                 ':sucursal_id' => $data['sucursal_id'] ?? null
@@ -442,12 +453,23 @@ class TaskRepository
             $oldData = $this->getTareaById($taskId);
             
             // Validar que deadline no sea antes que fecha_asignacion
-            $fechaAsignacion = $data['fecha_asignacion'] ?? $oldData['fecha_asignacion'] ?? date('Y-m-d');
-            $deadline = $data['deadline'] ?? $oldData['deadline'] ?? null;
+            $fechaAsignacion = $data['fecha_asignacion'] ?? $oldData['fechaAsignacion'] ?? date('Y-m-d');
+            $deadline = $data['deadline'] ?? $oldData['fechaVencimiento'] ?? null;
             
             if ($deadline && strtotime($deadline) < strtotime($fechaAsignacion)) {
                 $this->db->rollBack();
                 throw new InvalidArgumentException('La fecha de vencimiento no puede ser anterior a la fecha de asignación');
+            }
+
+            // Validar que si es el mismo día, horafin >= horainicio
+            $horainicio = $data['horainicio'] ?? $oldData['horainicio'] ?? null;
+            $horafin = $data['horafin'] ?? $oldData['horafin'] ?? null;
+            
+            if ($fechaAsignacion === $deadline && $horainicio && $horafin) {
+                if (strtotime($horafin) < strtotime($horainicio)) {
+                    $this->db->rollBack();
+                    throw new InvalidArgumentException('La hora de fin no puede ser anterior a la hora de inicio');
+                }
             }
             
             $fields = [];

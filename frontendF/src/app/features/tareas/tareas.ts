@@ -30,6 +30,7 @@ import {
 import { TareasService, TareaAdmin, Tarea, ResumenTareas } from './service/tareas.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
+import { DateUtilService } from '../../core/services/date-util.service';
 import { ModalReaperturar } from './pages/modal-reaperturar/modal-reaperturar';
 import { ModalCompletar } from './pages/modal-completar/modal-completar';
 import { SubtareaInfo } from './pages/subtarea-info/subtarea-info';
@@ -118,7 +119,8 @@ export class Tareas implements OnInit, OnDestroy {
     private authService: AuthService,
     private toastService: ToastService,
     private router: Router,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private dateUtilService: DateUtilService
   ) {}
 
   ngOnInit(): void {
@@ -159,6 +161,9 @@ export class Tareas implements OnInit, OnDestroy {
     if (!this.isAdmin) {
       this.selectedTab = 'mis-tareas';
     }
+    
+    // Usar fecha actual en UTC-5 en lugar de new Date()
+    this.dia = this.dateUtilService.getNowUTC5();
     
     // Actualizar fecha sin recargar tareas
     this.diaString = this.formatearFecha(this.dia);
@@ -549,8 +554,8 @@ export class Tareas implements OnInit, OnDestroy {
     const modal = await this.modalController.create({
       component: ModalCompletar,
       componentProps: { tarea },
-      breakpoints: [0, 0.85, 0.95],
-      initialBreakpoint: 0.85
+      breakpoints: [0, 1, 0.95],
+      initialBreakpoint: 1
     });
 
     modal.onDidDismiss().then((result) => {
@@ -722,8 +727,8 @@ export class Tareas implements OnInit, OnDestroy {
         tarea: tareaInfo,
         tareaadmin: tarea
       },
-      breakpoints: [0, 0.75, 1],
-      initialBreakpoint: 0.75
+      breakpoints: [0, 1, 1],
+      initialBreakpoint: 1
     });
 
     modal.onDidDismiss().then((result) => {
@@ -743,8 +748,8 @@ export class Tareas implements OnInit, OnDestroy {
         tarea: tarea,
         accion: 'reaperturar'
       },
-      breakpoints: [0, 0.5, 0.75, 1],
-      initialBreakpoint: 0.75
+      breakpoints: [0, 0.5, 1, 1],
+      initialBreakpoint: 1
     });
 
     modal.onDidDismiss().then((result) => {
@@ -842,8 +847,8 @@ export class Tareas implements OnInit, OnDestroy {
       componentProps: {
         tarea: tarea
       },
-      breakpoints: [0, 0.5, 0.85, 1],
-      initialBreakpoint: 0.85
+      breakpoints: [0, 0.5, 1, 1],
+      initialBreakpoint: 1
     });
 
     modal.onDidDismiss().then((result) => {
@@ -914,11 +919,13 @@ export class Tareas implements OnInit, OnDestroy {
   }
 
   obtenerSubtareasCompletadas(tarea: TareaAdmin): number {
-    return tarea.Tarea?.filter(t => t.completada).length || 0;
+    // Usar la propiedad del backend si existe, sino calcular del array
+    return tarea.subtareasCompletadas !== undefined ? tarea.subtareasCompletadas : (tarea.Tarea?.filter(t => t.completada).length || 0);
   }
 
   obtenerTotalSubtareas(tarea: TareaAdmin): number {
-    return tarea.Tarea?.length || 0;
+    // Usar la propiedad del backend si existe, sino calcular del array
+    return tarea.totalSubtareas !== undefined ? tarea.totalSubtareas : (tarea.Tarea?.length || 0);
   }
 
   obtenerPorcentajeSubtareas(tarea: TareaAdmin): number {

@@ -2,7 +2,7 @@
   <ion-toolbar class="bg-white">
     <ion-buttons slot="start">
       <ion-button fill="clear" size="small" (click)="goBack()">
-        <ion-icon name="arrow-back-outline" class="text-xl text-gray-700"></ion-icon>
+        <fa-icon [icon]="faArrowLeft" class="text-xl text-gray-700"></fa-icon>
       </ion-button>
     </ion-buttons>
     <ion-title class="text-center">
@@ -66,14 +66,34 @@
       </p>
 
       <!-- Fecha y Hora -->
-      <div class="flex items-center gap-6 text-sm text-gray-600">
-        <div class="flex items-center gap-2">
-          <ion-icon name="calendar-outline" class="text-gray-400"></ion-icon>
-          <span>{{tareaAdminSeleccionada?.fechaAsignacion || '--/--/----'}}</span>
+      <div class="grid grid-cols-2 gap-4 text-sm text-gray-600 mb-2">
+        <div>
+          <div class="text-xs font-medium text-gray-500 mb-1">Fecha de Asignación</div>
+          <div class="flex items-center gap-2">
+            <ion-icon name="calendar-outline" class="text-gray-400"></ion-icon>
+            <span>{{tareaAdminSeleccionada?.fechaAsignacion || '--/--/----'}}</span>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
-          <ion-icon name="time-outline" class="text-gray-400"></ion-icon>
-          <span>{{tareaAdminSeleccionada?.horaprogramada || '--:--'}} - {{tareaAdminSeleccionada?.horafin || '--:--'}}</span>
+        <div>
+          <div class="text-xs font-medium text-gray-500 mb-1">Hora de Inicio</div>
+          <div class="flex items-center gap-2">
+            <ion-icon name="time-outline" class="text-gray-400"></ion-icon>
+            <span>{{tareaAdminSeleccionada?.horaprogramada || '--:--'}}</span>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-medium text-gray-500 mb-1">Fecha Límite</div>
+          <div class="flex items-center gap-2">
+            <ion-icon name="calendar-outline" class="text-gray-400"></ion-icon>
+            <span>{{tareaAdminSeleccionada?.fechaVencimiento || '--/--/----'}}</span>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-medium text-gray-500 mb-1">Hora de Fin</div>
+          <div class="flex items-center gap-2">
+            <ion-icon name="time-outline" class="text-gray-400"></ion-icon>
+            <span>{{tareaAdminSeleccionada?.horafin || '--:--'}}</span>
+          </div>
         </div>
       </div>
     </div>

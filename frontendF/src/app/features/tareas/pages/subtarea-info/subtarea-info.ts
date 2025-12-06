@@ -254,6 +254,23 @@ export class SubtareaInfo implements OnInit {
       return;
     }
 
+    // Validación: NO permitir completar subtarea si la tarea padre no está en "En progreso"
+    if (this.tareaadmin.estado !== 'En progreso') {
+      const alert = await this.alertController.create({
+        header: 'No puedes completar esta subtarea',
+        message: `La tarea principal está en estado "${this.tareaadmin.estado}". Debes iniciar la tarea primero para poder completar sus subtareas.`,
+        buttons: [
+          {
+            text: 'Entendido',
+            role: 'confirm'
+          }
+        ],
+        cssClass: 'alert-warning'
+      });
+      await alert.present();
+      return;
+    }
+
     const alert = await this.alertController.create({
       header: 'Cambiar Estado',
       message: 'Selecciona el nuevo estado para esta subtarea',

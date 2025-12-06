@@ -1,13 +1,12 @@
 <ion-header>
   <ion-toolbar>
     <div class="flex justify-between items-center px-1 py-2">
+      <span class="text-xl font-bold pl-4">{{titulo}}</span>
       <div class="flex items-center gap-3">
         <ion-button fill="clear" size="small" (click)="goBack()">
-          <ion-icon name="chevron-back-outline" class="text-xl"></ion-icon>
+          <fa-icon [icon]="faXMark" class="text-xl"></fa-icon>
         </ion-button>
       </div>
-      <span class="text-base font-medium">{{titulo}}</span>
-      <ion-button color="white" class="m-0"></ion-button>
     </div>
   </ion-toolbar>
 </ion-header>
@@ -141,7 +140,8 @@
           [(ngModel)]="fechaAsignacion"
           fill="outline"
           class="text-xs"
-          [min]="minFechaAsignacion">
+          [min]="minFechaAsignacion"
+          (ionChange)="onFechaAsignacionChange()">
         </ion-input>
       </div>
 
@@ -167,7 +167,9 @@
           type="time"
           [(ngModel)]="horaInicio"
           fill="outline"
-          class="text-xs">
+          class="text-xs"
+          [min]="getMinHoraInicio()"
+          (ionChange)="onHoraInicioChange()">
         </ion-input>
       </div>
 

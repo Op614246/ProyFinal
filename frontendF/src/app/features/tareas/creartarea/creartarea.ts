@@ -1,10 +1,11 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AlertController, ModalController, PickerController } from '@ionic/angular';
-import { faCaretDown } from '@fortawesome/pro-regular-svg-icons';
+import { faCaretDown, faXmark } from '@fortawesome/pro-regular-svg-icons';
 import { TareasService, Categoria, UserAssignable } from '../service/tareas.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { DateUtilService } from '../../../core/services/date-util.service';
 
 @Component({
   selector: 'app-creartarea',
@@ -15,6 +16,7 @@ import { ToastService } from '../../../core/services/toast.service';
 export class Creartarea implements OnInit {
   // FontAwesome icons
   public faCaretDown = faCaretDown;
+  public faXMark = faXmark;
 
   // Propiedades del formulario
   nombreTarea: string = '';
@@ -45,6 +47,7 @@ export class Creartarea implements OnInit {
   horaInicio: string = '';
   horaFin: string = '';
   minFechaAsignacion: string = new Date().toISOString().split('T')[0]; // Mínimo = hoy
+  minHoraInicio: string = ''; // Se calcula dinámicamente
   
   // Modo edición
   modoEdicion: boolean = false;
@@ -69,12 +72,21 @@ export class Creartarea implements OnInit {
     private modalController: ModalController,
     private alertController: AlertController,
     private tareasService: TareasService,
-    private toastService: ToastService
+    private toastService: ToastService,
+    private dateUtilService: DateUtilService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
     // Cargar datos del backend
     this.cargarDatos();
+    
+    // Usar fecha actual en UTC-5 en lugar de new Date()
+    this.fechaAsignacion = this.dateUtilService.getTodayString();
+    this.minFechaAsignacion = this.dateUtilService.getTodayString();
+    
+    // Watcher para detectar cambios en fechaAsignacion
+    this.onFechaAsignacionChange();
     
     this.route.queryParams.subscribe(params => {
       if (params['edit'] === 'true') {
@@ -312,6 +324,46 @@ export class Creartarea implements OnInit {
       return;
     }
 
+    // VALIDACIÓN: deadline no puede ser antes que fecha_asignacion
+    if (this.fechaLimite && this.fechaAsignacion) {
+      const fechaAsignacionObj = new Date(this.fechaAsignacion + 'T00:00:00');
+      const fechaLimiteObj = new Date(this.fechaLimite + 'T23:59:59');
+      
+      if (fechaLimiteObj < fechaAsignacionObj) {
+        this.toastService.error('La fecha límite no puede ser anterior a la fecha de asignación');
+        return;
+      }
+    }
+
+    // VALIDACIÓN: horaInicio no puede ser anterior a la hora actual (si es hoy)
+    if (this.horaInicio) {
+      const hoy = this.dateUtilService.getTodayString();
+      const ahora = this.dateUtilService.getNowUTC5();
+      const horaActual = ahora.getHours().toString().padStart(2, '0') + ':' + ahora.getMinutes().toString().padStart(2, '0');
+      
+      if (this.fechaAsignacion === hoy) {
+        const horaInicioObj = new Date('2000-01-01T' + this.horaInicio);
+        const horaActualObj = new Date('2000-01-01T' + horaActual);
+        
+        if (horaInicioObj <= horaActualObj) {
+          this.toastService.error('La hora de inicio debe ser posterior a la hora actual');
+          this.horaInicio = ''; // Limpiar la hora inválida
+          return;
+        }
+      }
+    }
+
+    // VALIDACIÓN: Si es el mismo día, horaFin >= horaInicio
+    if (this.fechaAsignacion === this.fechaLimite && this.horaInicio && this.horaFin) {
+      const horaInicioObj = new Date('2000-01-01T' + this.horaInicio);
+      const horaFinObj = new Date('2000-01-01T' + this.horaFin);
+      
+      if (horaFinObj < horaInicioObj) {
+        this.toastService.error('La hora de fin no puede ser anterior a la hora de inicio');
+        return;
+      }
+    }
+
     const tareaData: any = {
       ...(this.modoEdicion && this.tareaId && { id: parseInt(this.tareaId) }),
       title: this.nombreTarea.trim(),
@@ -368,7 +420,7 @@ export class Creartarea implements OnInit {
     this.orden = '1';
     this.prioridad = 'medium';
     this.estadoActivo = true;
-    this.fechaAsignacion = new Date().toISOString().split('T')[0];
+    this.fechaAsignacion = this.dateUtilService.getTodayString();
     this.fechaLimite = '';
     this.horaInicio = '';
     this.horaFin = '';
@@ -391,6 +443,60 @@ export class Creartarea implements OnInit {
     if (sucursal) {
       this.sucursalSeleccionadaId = sucursal.id;
       this.sucursalSeleccionada = sucursal.nombre;
+    }
+  }
+
+  // Getter para calcular la hora mínima permitida (hora actual + 1 minuto si es hoy)
+  getMinHoraInicio(): string {
+    const hoy = this.dateUtilService.getTodayString();
+    
+    // Si la fecha de asignación es hoy, retornar la hora actual + 1 minuto
+    if (this.fechaAsignacion === hoy) {
+      const ahora = this.dateUtilService.getNowUTC5();
+      // Sumar 1 minuto para que no se pueda seleccionar la hora actual exacta
+      ahora.setMinutes(ahora.getMinutes() + 1);
+      const horas = ahora.getHours().toString().padStart(2, '0');
+      const minutos = ahora.getMinutes().toString().padStart(2, '0');
+      return `${horas}:${minutos}`;
+    }
+    
+    // Si es una fecha futura, no hay restricción de hora
+    return '00:00';
+  }
+
+  // Detección automática de cambios en fechaAsignacion
+  onFechaAsignacionChange() {
+    // Si la fechaAsignacion cambia a una fecha posterior a fechaLimite, limpiar fechaLimite
+    if (this.fechaAsignacion && this.fechaLimite) {
+      const fechaAsignacion = new Date(this.fechaAsignacion);
+      const fechaLimite = new Date(this.fechaLimite);
+      
+      if (fechaAsignacion > fechaLimite) {
+        // Limpiar fecha límite para que el usuario seleccione una nueva
+        this.fechaLimite = '';
+        this.horaFin = ''; // También limpiar hora fin para mantener consistencia
+        this.cdr.detectChanges(); // Detectar cambios automáticamente
+      }
+    }
+  }
+
+  // Validación de hora de inicio en tiempo real
+  onHoraInicioChange() {
+    if (this.horaInicio) {
+      const hoy = this.dateUtilService.getTodayString();
+      const ahora = this.dateUtilService.getNowUTC5();
+      const horaActual = ahora.getHours().toString().padStart(2, '0') + ':' + ahora.getMinutes().toString().padStart(2, '0');
+      
+      if (this.fechaAsignacion === hoy) {
+        const horaInicioObj = new Date('2000-01-01T' + this.horaInicio);
+        const horaActualObj = new Date('2000-01-01T' + horaActual);
+        
+        // Si la hora es inválida (menor o igual a la actual), limpiar
+        if (horaInicioObj <= horaActualObj) {
+          this.horaInicio = '';
+          this.toastService.warning('La hora de inicio debe ser posterior a la hora actual');
+        }
+      }
     }
   }
 }
