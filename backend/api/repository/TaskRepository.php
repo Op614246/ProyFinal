@@ -594,6 +594,7 @@ class TaskRepository
                         reopened_at = NOW(),
                         reabierta_por = :reopened_by,
                         assigned_user_id = :assigned_user_id,
+                        fecha_asignacion = CURDATE(),
                         deadline = :deadline,
                         priority = :priority,
                         updated_at = NOW()
