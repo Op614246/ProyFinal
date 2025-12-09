@@ -41,6 +41,17 @@ class TaskRepository
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: ['total' => 0, 'completadas' => 0];
     }
 
+    public function getSubtareasIncompletas(int $taskId): array
+    {
+        $sql = "SELECT id, titulo, estado 
+                FROM subtareas 
+                WHERE task_id = ? AND is_deleted = 0 AND estado != 'Completada'";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$taskId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
     private function resolveCategoriaId($categoria): ?int
     {
         if (empty($categoria)) return null;

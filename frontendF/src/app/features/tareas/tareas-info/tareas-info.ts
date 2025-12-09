@@ -477,6 +477,8 @@ export class TareasInfo implements OnInit {
             this.tareaAdminSeleccionada!.estado = 'Pendiente';
             this.tareasService.notificarActualizacion();
             this.mostrarToast('Tarea reaperturada correctamente', 'success');
+            // Reabrirse las subtareas también
+            this.reabrirSubtareas();
             this.cargarSubtareas();
           } else {
             this.mostrarToast(response?.mensajes?.[0] || 'Error al reabrir tarea', 'danger');
@@ -488,6 +490,22 @@ export class TareasInfo implements OnInit {
         }
       });
     }
+  }
+
+  // Reabrirse las subtareas cuando se reabre la tarea
+  private reabrirSubtareas() {
+    if (!this.tareaAdminSeleccionada || this.subtareas.length === 0) return;
+
+    // Cambiar estado de todas las subtareas a 'Pendiente' y progreso a 0
+    this.subtareas.forEach(subtarea => {
+      subtarea.estado = 'Pendiente';
+      subtarea.completada = false;
+      subtarea.progreso = 0;
+    });
+
+    // Actualizar la lista de subtareas
+    this.cdr.markForCheck();
+    this.cdr.detectChanges();
   }
 
   async abrirModalEditar(subtarea: Tarea) {
@@ -525,10 +543,10 @@ export class TareasInfo implements OnInit {
       componentProps: {
         edit: true,
         tareaId: this.tareaAdminSeleccionada.id,
-        titulo: this.tareaAdminSeleccionada.titulo,
+        titulo_tarea: this.tareaAdminSeleccionada.titulo,
         descripcion: this.tareaAdminSeleccionada.descripcion,
         categoria: this.tareaAdminSeleccionada.Categoria,
-        prioridad: this.tareaAdminSeleccionada.Prioridad,
+        prioridad_input: this.tareaAdminSeleccionada.Prioridad,
         horainicio: this.tareaAdminSeleccionada.horainicio,
         horafin: this.tareaAdminSeleccionada.horafin,
         sucursal: this.tareaAdminSeleccionada.sucursal
@@ -584,7 +602,12 @@ export class TareasInfo implements OnInit {
       next: (response) => {
         if (response.tipo === 1) {
           this.mostrarToast('Tarea eliminada correctamente', 'success');
-          this.goBack();
+          // Volver y recargar tareas en el componente padre
+          setTimeout(() => {
+            this.goBack();
+            // Emitir evento para recargar las tareas en el componente padre
+            window.dispatchEvent(new CustomEvent('tareaEliminada'));
+          }, 300);
         } else {
           this.mostrarToast(response.mensajes?.[0] || 'Error al eliminar tarea', 'danger');
         }
@@ -745,6 +768,7 @@ export class TareasInfo implements OnInit {
       case 'Pendiente': return 'Iniciar tarea';
       case 'En progreso': return 'Finalizar tarea';
       case 'Completada': return this.isAdmin ? 'Reaperturar tarea' : '';
+      case 'Inactiva': return this.isAdmin ? 'Reaperturar tarea' : '';
       default: return 'Iniciar tarea';
     }
   }
@@ -756,6 +780,7 @@ export class TareasInfo implements OnInit {
       case 'Pendiente': return 'primary';
       case 'En progreso': return 'success';
       case 'Completada': return 'warning';
+      case 'Inactiva': return 'danger';
       default: return 'primary';
     }
   }
@@ -771,6 +796,9 @@ export class TareasInfo implements OnInit {
         this.finalizarTarea();
         break;
       case 'Completada':
+        if (this.isAdmin) this.abrirModalReaperturar();
+        break;
+      case 'Inactiva':
         if (this.isAdmin) this.abrirModalReaperturar();
         break;
     }
@@ -801,6 +829,18 @@ export class TareasInfo implements OnInit {
   // Llamada para finalizar tarea (pide confirmación)
   async finalizarTarea() {
     if (!this.tareaAdminSeleccionada) return;
+
+    // Validar que todas las subtareas estén completadas
+    if (this.subtareas.length > 0) {
+      const subtareasIncompletas = this.subtareas.filter(s => !s.completada);
+      if (subtareasIncompletas.length > 0) {
+        this.mostrarToast(
+          `No puedes completar la tarea. Aún hay ${subtareasIncompletas.length} subtarea(s) incompleta(s)`,
+          'warning'
+        );
+        return;
+      }
+    }
 
     const modal = await this.modalController.create({
       component: ModalCompletar,

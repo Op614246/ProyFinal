@@ -34,6 +34,7 @@ import { DateUtilService } from '../../core/services/date-util.service';
 import { ModalReaperturar } from './pages/modal-reaperturar/modal-reaperturar';
 import { ModalCompletar } from './pages/modal-completar/modal-completar';
 import { SubtareaInfo } from './pages/subtarea-info/subtarea-info';
+import { Creartarea } from './creartarea/creartarea';
 
 @Component({
   selector: 'app-tareas',
@@ -135,6 +136,11 @@ export class Tareas implements OnInit, OnDestroy {
       .subscribe(() => {
         this.cargarTareas();
       });
+    
+    // Escuchar evento de tarea eliminada desde tareas-info
+    window.addEventListener('tareaEliminada', () => {
+      this.cargarTareas();
+    });
   }
 
   ngOnDestroy(): void {
@@ -691,8 +697,29 @@ export class Tareas implements OnInit, OnDestroy {
       this.tareasService.eliminarTareaAdmin(tareaId)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
-          next: () => this.cargarTareas(),
-          error: (err) => console.error('Error:', err)
+          next: (response) => {
+            if (response.tipo === 1) {
+              // Remover la tarea inmediatamente de las listas locales
+              this.tareasAdmin = this.tareasAdmin.filter(t => t.id !== tareaId);
+              this.tareasSinAsignar = this.tareasSinAsignar.filter(t => t.id !== tareaId);
+              this.misTareas = this.misTareas.filter(t => t.id !== tareaId);
+              
+              // Actualizar resumen
+              this.actualizarResumen();
+              
+              // Forzar actualización de la UI
+              this.cdr.markForCheck();
+              
+              this.toastService.success('Tarea eliminada correctamente');
+            } else {
+              this.toastService.error('Error al eliminar la tarea');
+              console.error('Error response:', response);
+            }
+          },
+          error: (err) => {
+            this.toastService.error('Error al eliminar la tarea');
+            console.error('Error:', err);
+          }
         });
     }
   }
@@ -876,6 +903,43 @@ export class Tareas implements OnInit, OnDestroy {
         },
         error: (err) => console.error('Error al completar:', err)
       });
+  }
+
+  // Abrir modal para editar tarea (solo admin)
+  async abrirModalEditar(tarea: TareaAdmin, event?: Event): Promise<void> {
+    if (event) {
+      event.stopPropagation();
+    }
+
+    console.log('abrirModalEditar - tarea:', tarea);
+
+    const modal = await this.modalController.create({
+      component: Creartarea,
+      presentingElement: await this.modalController.getTop(), // Asegurar que se presente correctamente
+      componentProps: {
+        edit: true,
+        tareaId: tarea.id,
+        titulo_tarea: tarea.titulo,
+        descripcion: tarea.descripcion,
+        categoria: tarea.Categoria,
+        prioridad_input: tarea.Prioridad,
+        horainicio: tarea.horainicio,
+        horafin: tarea.horafin,
+        sucursal: tarea.sucursal
+      }
+    });
+
+    console.log('Modal creado, presentando...');
+
+    modal.onDidDismiss().then((result) => {
+      console.log('Modal cerrado con resultado:', result);
+      if (result.role === 'confirm' || result.data?.actualizada) {
+        this.cargarTareas();
+      }
+    });
+
+    await modal.present();
+    console.log('Modal presentado');
   }
 
   // Ver información de tarea (sin importar estado) - navega a tareas-info

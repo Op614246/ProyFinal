@@ -45,6 +45,11 @@ $app->put('/:id/iniciar', function ($taskId) use ($app) {
     $controller->iniciarTarea($taskId);
 });
 
+$app->delete('/:id', function ($taskId) use ($app) {
+    $controller = new TaskController($app);
+    $controller->delete($taskId);
+});
+
 $app->get('/', function () use ($app) {
     $controller = new TaskController($app);
     $controller->getAllTareas();
@@ -58,11 +63,6 @@ $app->get('/fecha/:fecha', function ($fecha) use ($app) {
 $app->put('/:id/status', function ($id) use ($app) {
     $taskController = new TaskController($app);
     $taskController->updateStatus($id);
-});
-
-$app->delete('/:id', function ($id) use ($app) {
-    $taskController = new TaskController($app);
-    $taskController->delete($id);
 });
 
 $app->put('/:id/reabrir', function ($taskId) use ($app) {

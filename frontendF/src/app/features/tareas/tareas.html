@@ -441,9 +441,22 @@
                 <span class="text-xs">Ver</span>
               </ion-button>
 
-              <!-- Si está completada: Reaperturar -->
+              <!-- Editar (solo admin) -->
               <ion-button
-                *ngIf="tarea.estado === 'Completada'"
+                *ngIf="isAdmin"
+                fill="outline"
+                color="primary"
+                size="small"
+                class="flex-1"
+                (click)="abrirModalEditar(tarea, $event)"
+              >
+                <fa-icon [icon]="faEdit" class="mr-1"></fa-icon>
+                <span class="text-xs">Editar</span>
+              </ion-button>
+
+              <!-- Si está completada o inactiva: Reaperturar -->
+              <ion-button
+                *ngIf="tarea.estado === 'Completada' || tarea.estado === 'Inactiva'"
                 fill="outline"
                 color="warning"
                 size="small"

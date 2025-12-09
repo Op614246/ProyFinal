@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, Input } from '@angular/core';
 import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AlertController, ModalController, PickerController } from '@ionic/angular';
@@ -49,9 +49,21 @@ export class Creartarea implements OnInit {
   minFechaAsignacion: string = new Date().toISOString().split('T')[0]; // Mínimo = hoy
   minHoraInicio: string = ''; // Se calcula dinámicamente
   
-  // Modo edición
+  // Modo edición - recibir desde modal
+  @Input() edit: boolean = false;
+  @Input() tareaId?: string;
+  @Input() titulo_tarea?: string;
+  @Input() descripcion?: string;
+  @Input() categoria?: string;
+  @Input() prioridad_input?: string;
+  @Input() horainicio?: string;
+  @Input() horafin?: string;
+  @Input() sucursal?: string;
+  
+  // Propiedades internas para modoEdicion
   modoEdicion: boolean = false;
-  tareaId?: string;
+  esModalIonic: boolean = false; // Detectar si está dentro de un modal Ionic
+  titulo: string = 'Crear tarea'; // Propiedad para el título del header
   
   // Loading states
   cargandoUsuarios: boolean = false;
@@ -75,9 +87,15 @@ export class Creartarea implements OnInit {
     private toastService: ToastService,
     private dateUtilService: DateUtilService,
     private cdr: ChangeDetectorRef
-  ) {}
+  ) {
+    // Detectar si estamos dentro de un modal
+    this.esModalIonic = !!this.modalController.getTop();
+    console.log('Creartarea constructor - esModalIonic:', this.esModalIonic);
+  }
 
   ngOnInit() {
+    console.log('Creartarea ngOnInit - @Input edit:', this.edit);
+    
     // Cargar datos del backend
     this.cargarDatos();
     
@@ -88,9 +106,32 @@ export class Creartarea implements OnInit {
     // Watcher para detectar cambios en fechaAsignacion
     this.onFechaAsignacionChange();
     
+    // Procesar @Input() properties (cuando se abre como modal)
+    if (this.edit) {
+      console.log('Modo edición activado', {
+        titulo_tarea: this.titulo_tarea,
+        descripcion: this.descripcion,
+        categoria: this.categoria,
+        prioridad_input: this.prioridad_input
+      });
+      this.modoEdicion = true;
+      this.titulo = 'Editar tarea';
+      this.nombreTarea = this.titulo_tarea || '';
+      this.descripcionTarea = this.descripcion || '';
+      this.categoriaSeleccionada = this.categoria || '';
+      this.prioridad = (this.prioridad_input || 'medium').toLowerCase();
+      this.horaInicio = this.horainicio || '';
+      this.horaFin = this.horafin || '';
+      this.sucursalSeleccionada = this.sucursal || '';
+    } else {
+      this.titulo = 'Crear tarea';
+    }
+    
+    // También procesar query params (cuando se abre como ruta)
     this.route.queryParams.subscribe(params => {
       if (params['edit'] === 'true') {
         this.modoEdicion = true;
+        this.titulo = 'Editar tarea';
         this.tareaId = params['tareaId'];
         this.nombreTarea = params['titulo'] || '';
         this.descripcionTarea = params['descripcion'] || '';
@@ -103,6 +144,8 @@ export class Creartarea implements OnInit {
         }
       }
     });
+    
+    console.log('Creartarea ngOnInit completado - modoEdicion:', this.modoEdicion);
   }
   
   cargarDatos() {
@@ -160,20 +203,48 @@ export class Creartarea implements OnInit {
     });
   }
   
-  get titulo(): string {
-    return this.modoEdicion ? 'Editar tarea' : 'Crear tarea';
+  async goBack() {
+    console.log('goBack() llamado - esModalIonic:', this.esModalIonic);
+    
+    // Si estamos dentro de un modal Ionic, cerrar el modal
+    if (this.esModalIonic) {
+      try {
+        await this.modalController.dismiss();
+        console.log('Modal cerrado exitosamente');
+      } catch (err) {
+        console.error('Error al cerrar modal:', err);
+        this.location.back();
+      }
+    } else {
+      // Si no, usar location.back()
+      this.location.back();
+    }
   }
 
-  goBack() {
-    this.location.back();
-  }
-
-  goBackWithSuccess() {
+  async goBackWithSuccess() {
+    console.log('goBackWithSuccess() llamado - esModalIonic:', this.esModalIonic);
+    
     localStorage.setItem('tareaOperacionExito', JSON.stringify({
       operacion: this.modoEdicion ? 'editada' : 'creada',
       timestamp: Date.now()
     }));
-    this.location.back();
+    
+    // Si estamos dentro de un modal Ionic, cerrar el modal con datos
+    if (this.esModalIonic) {
+      try {
+        await this.modalController.dismiss({
+          actualizada: true,
+          operacion: this.modoEdicion ? 'editada' : 'creada'
+        });
+        console.log('Modal cerrado con éxito');
+      } catch (err) {
+        console.error('Error al cerrar modal:', err);
+        this.location.back();
+      }
+    } else {
+      // Si no, usar location.back()
+      this.location.back();
+    }
   }
 
   onTipoAsignacionChange() {

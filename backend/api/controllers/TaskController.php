@@ -240,6 +240,14 @@ class TaskController
             $taskId = (int)$taskId;
             $observaciones = $this->app->request()->post('observaciones') ?? '';
 
+            // Validar que todas las subtareas estén completadas
+            $subtareasIncompletas = $this->repository->getSubtareasIncompletas($taskId);
+            if (!empty($subtareasIncompletas)) {
+                return $this->validationError(
+                    'No puedes completar la tarea. Aún hay ' . count($subtareasIncompletas) . ' subtarea(s) incompleta(s)'
+                );
+            }
+
             $user = $this->getAuthenticatedUser();
             $userId = $user['id'] ?? $user['user_id'] ?? null;
 
@@ -502,7 +510,7 @@ class TaskController
                 return $this->sendResponse($this->validator->taskNotFound());
             }
 
-            if ($task['status'] === 'completed') {
+            if ($task['status_internal'] === 'completed') {
                 return $this->sendResponse($this->validator->cannotDeleteCompleted());
             }
 
@@ -511,7 +519,7 @@ class TaskController
             if ($result) {
                 Logger::info('Tarea eliminada', [
                     'task_id' => $taskId,
-                    'title' => $task['title'],
+                    'title' => $task['titulo'],
                     'deleted_by' => $userData['username'],
                     'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
                 ]);
