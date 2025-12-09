@@ -1,6 +1,4 @@
 <?php
-require_once __DIR__ . '/../core/Logger.php';
-require_once __DIR__ . '/../../smart/validators/AuthValidator.php';
 
 class AuthController {
 

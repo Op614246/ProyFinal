@@ -109,7 +109,7 @@ class TaskController
         ];
     }
 
-    public function getAllTareasAdmin()
+    public function getAllTareas()
     {
         try {
             $request = $this->app->request();
@@ -130,7 +130,7 @@ class TaskController
 
             Logger::debug('getAllTareasAdmin filtros recibidos', $filtros);
 
-            $tareas = $this->repository->getTareasConFiltros($filtros);
+            $tareas = $this->repository->getTareas(null, $filtros);
 
             return $this->success([
                 "tareas" => $tareas,
@@ -143,7 +143,7 @@ class TaskController
         }
     }
 
-    public function getTareaAdminById($taskId)
+    public function getTareaById($taskId)
     {
         try {
             $tarea = $this->repository->getTareaById((int)$taskId);
@@ -159,10 +159,10 @@ class TaskController
         }
     }
 
-    public function getTareasAdminPorFecha($fecha)
+    public function getTareasPorFecha($fecha)
     {
         try {
-            $tareas = $this->repository->getTareasConFiltros(['fecha' => $fecha]);
+            $tareas = $this->repository->getTareas(null, ['fecha' => $fecha]);
 
             return $this->success([
                 "tareas" => $tareas,
@@ -174,76 +174,8 @@ class TaskController
             return $this->serverError('Error al obtener tareas');
         }
     }
-    public function createTareaAdmin()
-    {
-        try {
-            $userData = $this->getAuthenticatedUser();
-            $userId = $userData['id'] ?? null;
 
-            $data = json_decode($this->app->request()->getBody(), true);
-
-            if (empty($data['titulo'])) {
-                return $this->validationError('El título es requerido');
-            }
-
-            $taskId = $this->repository->crearTareaAdmin($data, $userId);
-            $tarea = $this->repository->getTareaById($taskId);
-
-            Logger::info('Tarea creada', ['id' => $taskId, 'user_id' => $userId]);
-            return $this->success($tarea, 'Tarea creada correctamente', 201);
-        } catch (InvalidArgumentException $e) {
-            Logger::warning('Error de validación al crear tarea', ['error' => $e->getMessage()]);
-            return $this->validationError($e->getMessage());
-        } catch (Exception $e) {
-            Logger::error('Error al crear tarea', ['error' => $e->getMessage()]);
-            return $this->serverError('Error al crear tarea');
-        }
-    }
-
-    public function updateTareaAdmin($taskId)
-    {
-        try {
-            $data = json_decode($this->app->request()->getBody(), true);
-
-            $this->repository->actualizarTareaAdmin((int)$taskId, $data);
-            $tarea = $this->repository->getTareaById((int)$taskId);
-
-            Logger::info('Tarea actualizada', ['id' => $taskId]);
-            return $this->success($tarea, 'Tarea actualizada correctamente');
-        } catch (InvalidArgumentException $e) {
-            Logger::warning('Error de validación al actualizar tarea', ['error' => $e->getMessage()]);
-            return $this->validationError($e->getMessage());
-        } catch (Exception $e) {
-            Logger::error('Error al actualizar tarea', ['error' => $e->getMessage()]);
-            return $this->serverError('Error al actualizar tarea');
-        }
-    }
-
-    public function deleteTareaAdmin($taskId)
-    {
-        try {
-            $user = $this->getAuthenticatedUser();
-            $userId = $user['id'] ?? $user['user_id'] ?? null;
-
-            if (!$userId) {
-                return $this->validationError('Usuario no autenticado', 401);
-            }
-
-            $result = $this->repository->delete((int)$taskId, (int)$userId);
-
-            if ($result) {
-                Logger::info('Tarea eliminada (soft)', ['id' => (int)$taskId, 'deleted_by' => (int)$userId]);
-                return $this->success(['id' => (int)$taskId], 'Tarea eliminada correctamente');
-            }
-
-            return $this->validationError('No se pudo eliminar la tarea', 400);
-        } catch (Exception $e) {
-            Logger::error('Error al eliminar tarea', ['error' => $e->getMessage()]);
-            return $this->serverError('Error al eliminar tarea');
-        }
-    }
-
-    public function asignarTareaAdmin($taskId)
+    public function asignarTarea($taskId)
     {
         try {
             $user = $this->getAuthenticatedUser();
@@ -277,7 +209,7 @@ class TaskController
             return $this->serverError('Error al asignar tarea');
         }
     }
-    public function iniciarTareaAdmin($taskId)
+    public function iniciarTarea($taskId)
     {
         try {
             $taskId = (int)$taskId;
@@ -302,7 +234,7 @@ class TaskController
         }
     }
 
-    public function completarTareaAdmin($taskId)
+    public function completarTarea($taskId)
     {
         try {
             $taskId = (int)$taskId;
@@ -391,75 +323,6 @@ class TaskController
         return $map[$priority] ?? $priority;
     }
 
-    public function getAll()
-    {
-        try {
-            $userData = $this->getAuthenticatedUser();
-
-            if (!$userData) {
-                return $this->sendResponse($this->validator->invalidSession());
-            }
-
-            $isAdmin = $userData['role'] === 'admin';
-
-            if ($isAdmin) {
-                $filters = [
-                    'fecha_inicio' => $this->app->request()->get('fecha_inicio'),
-                    'fecha_fin' => $this->app->request()->get('fecha_fin'),
-                    'status' => $this->app->request()->get('status'),
-                    'priority' => $this->app->request()->get('priority')
-                ];
-
-                // Limpiar filtros vacíos
-                $filters = array_filter($filters, function ($v) {
-                    return $v !== null && $v !== '';
-                });
-
-                $tasks = $this->repository->getTareas(null, $filters);
-
-                Logger::info('Admin consultó lista de tareas', [
-                    'admin_id' => $userData['id'],
-                    'filters' => $filters,
-                    'count' => count($tasks),
-                    'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-                ]);
-            } else {
-                $myTasks = $this->repository->getAllForUser($userData['id']);
-                $availableTasks = $this->repository->getAvailableTasks();
-
-                $tasks = [
-                    'my_tasks' => $myTasks,
-                    'available_tasks' => $availableTasks
-                ];
-
-                Logger::debug('Usuario consultó sus tareas', [
-                    'user_id' => $userData['id'],
-                    'my_tasks_count' => count($myTasks),
-                    'available_count' => count($availableTasks)
-                ]);
-            }
-
-            $count = $isAdmin ? count($tasks) : (count($tasks['my_tasks']) + count($tasks['available_tasks']));
-
-            if ($count === 0) {
-                $response = $this->validator->listEmpty();
-            } else {
-                $response = $this->validator->listSuccess($count);
-            }
-
-            $response['data'] = $tasks;
-            return $this->sendResponse($response);
-        } catch (Exception $e) {
-            Logger::error('Error al listar tareas', [
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-            ]);
-            return $this->sendResponse($this->validator->serverError());
-        }
-    }
-
     public function create()
     {
         try {
@@ -539,239 +402,6 @@ class TaskController
                 'error' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
-                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-            ]);
-            return $this->sendResponse($this->validator->serverError());
-        }
-    }
-
-    public function assign($taskId)
-    {
-        try {
-            $userData = $this->getAuthenticatedUser();
-
-            if (!$userData) {
-                return $this->sendResponse($this->validator->invalidSession());
-            }
-
-            $taskId = (int)$taskId;
-
-            $task = $this->repository->getTareaById($taskId);
-
-            if (!$task) {
-                return $this->sendResponse($this->validator->taskNotFound());
-            }
-
-            $isAdmin = $userData['role'] === 'admin';
-
-            if ($isAdmin) {
-                $data = $this->getDecryptedRequestData();
-
-                if (!$data || empty($data['user_id'])) {
-                    return $this->sendResponse($this->validator->incompleteData());
-                }
-
-                $targetUserId = (int)$data['user_id'];
-
-                if (!$this->repository->userExists($targetUserId)) {
-                    return $this->sendResponse($this->validator->userNotFound());
-                }
-
-                $result = $this->repository->assign($taskId, $targetUserId, $userData['id']);
-
-                if ($result) {
-                    $username = $this->repository->getUsernameById($targetUserId);
-
-                    Logger::info('Tarea reasignada por admin', [
-                        'task_id' => $taskId,
-                        'assigned_to' => $targetUserId,
-                        'assigned_by' => $userData['username'],
-                        'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-                    ]);
-
-                    return $this->sendResponse($this->validator->assignSuccess($username ?? 'Usuario'));
-                }
-            } else {
-                if (!$this->repository->isAvailable($taskId)) {
-                    return $this->sendResponse($this->validator->alreadyAssigned());
-                }
-
-                $result = $this->repository->assign($taskId, $userData['id'], $userData['id']);
-
-                if ($result) {
-                    Logger::info('Usuario se auto-asignó tarea', [
-                        'task_id' => $taskId,
-                        'user_id' => $userData['id'],
-                        'username' => $userData['username'],
-                        'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-                    ]);
-
-                    return $this->sendResponse($this->validator->selfAssignSuccess());
-                }
-            }
-
-            return $this->sendResponse($this->validator->assignError());
-        } catch (Exception $e) {
-            Logger::error('Error al asignar tarea', [
-                'task_id' => $taskId ?? 'unknown',
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-            ]);
-            return $this->sendResponse($this->validator->serverError());
-        }
-    }
-
-    public function complete($taskId)
-    {
-        try {
-            $userData = $this->getAuthenticatedUser();
-
-            if (!$userData) {
-                return $this->sendResponse($this->validator->invalidSession());
-            }
-
-            $taskId = (int)$taskId;
-
-            $task = $this->repository->getTareaById($taskId);
-
-            if (!$task) {
-                return $this->sendResponse($this->validator->taskNotFound());
-            }
-
-            if ((int)$task['assigned_user_id'] !== $userData['id']) {
-                Logger::warning('Intento de completar tarea no asignada', [
-                    'task_id' => $taskId,
-                    'user_id' => $userData['id'],
-                    'assigned_to' => $task['assigned_user_id'],
-                    'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-                ]);
-                return $this->sendResponse($this->validator->notAssignedToYou());
-            }
-
-            if ($task['status'] === 'completed') {
-                return $this->sendResponse($this->validator->alreadyCompleted());
-            }
-
-            $allowedStatuses = ['pending', 'in_process'];
-            if (!in_array($task['status'], $allowedStatuses)) {
-                return $this->sendResponse($this->validator->cannotComplete());
-            }
-
-            $observaciones = isset($_POST['observaciones']) ? trim($_POST['observaciones']) : '';
-
-            $uploadResult = $this->processUploadedFiles();
-            $hasFiles = !empty($uploadResult['files']);
-
-            if (empty($observaciones) && !$hasFiles) {
-                return $this->sendResponse([
-                    'tipo' => 0,
-                    'mensajes' => ['Debe proporcionar observaciones y/o imagen de evidencia.'],
-                    'data' => null
-                ]);
-            }
-
-            if ($uploadResult['error']) {
-                return $this->sendResponse([
-                    'tipo' => 0,
-                    'mensajes' => [$uploadResult['error']],
-                    'data' => null
-                ]);
-            }
-
-            $evidencePath = null;
-            $imagenesGuardadas = [];
-
-            foreach ($uploadResult['files'] as $file) {
-                if (!$this->validator->validateCompletionImage($file)) {
-                    return $this->sendResponse($this->validator->imageValidationError());
-                }
-
-                $savedFile = $this->saveFileToDisk($file, $taskId, $userData['id']);
-
-                if (!$savedFile) {
-                    return $this->sendResponse($this->validator->imageUploadError());
-                }
-
-                $imagenesGuardadas[] = $savedFile;
-                if (!$evidencePath) {
-                    $evidencePath = $savedFile['path'];
-                }
-            }
-
-            if (!empty($imagenesGuardadas)) {
-                $this->repository->guardarEvidencias($taskId, $userData['id'], $imagenesGuardadas, $observaciones);
-            }
-
-            $result = $this->repository->complete($taskId, $userData['id'], $observaciones, $evidencePath);
-
-            if ($result) {
-                Logger::info('Tarea completada', [
-                    'task_id' => $taskId,
-                    'user_id' => $userData['id'],
-                    'username' => $userData['username'],
-                    'imagenes' => count($imagenesGuardadas),
-                    'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-                ]);
-
-                $response = $this->validator->completeSuccess();
-                $response['data'] = [
-                    'completed_at' => date('Y-m-d H:i:s'),
-                    'imagenes_guardadas' => count($imagenesGuardadas)
-                ];
-                return $this->sendResponse($response);
-            }
-
-            return $this->sendResponse($this->validator->completeError());
-        } catch (Exception $e) {
-            Logger::error('Error al completar tarea', [
-                'task_id' => $taskId ?? 'unknown',
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-            ]);
-            return $this->sendResponse($this->validator->serverError());
-        }
-    }
-
-    public function getById($taskId)
-    {
-        try {
-            $userData = $this->getAuthenticatedUser();
-
-            if (!$userData) {
-                return $this->sendResponse($this->validator->invalidSession());
-            }
-
-            $taskId = (int)$taskId;
-            $task = $this->repository->getTareaById($taskId);
-
-            if (!$task) {
-                return $this->sendResponse($this->validator->taskNotFound());
-            }
-
-            if ($userData['role'] !== 'admin') {
-                $isOwner = (int)$task['assigned_user_id'] === $userData['id'];
-                $isAvailable = $task['assigned_user_id'] === null;
-
-                if (!$isOwner && !$isAvailable) {
-                    return $this->sendResponse($this->validator->permissionDenied());
-                }
-            }
-
-            $response = [
-                'tipo' => 1,
-                'mensajes' => ["Tarea obtenida exitosamente."],
-                'data' => $task
-            ];
-
-            return $this->sendResponse($response);
-        } catch (Exception $e) {
-            Logger::error('Error al obtener tarea', [
-                'task_id' => $taskId ?? 'unknown',
-                'error' => $e->getMessage(),
                 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
             ]);
             return $this->sendResponse($this->validator->serverError());
@@ -892,105 +522,6 @@ class TaskController
             return $this->sendResponse($this->validator->deleteError());
         } catch (Exception $e) {
             Logger::error('Error al eliminar tarea', [
-                'task_id' => $taskId ?? 'unknown',
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-            ]);
-            return $this->sendResponse($this->validator->serverError());
-        }
-    }
-
-    public function reopen($taskId)
-    {
-        try {
-            $userData = $this->getAuthenticatedUser();
-
-            if (!$userData) {
-                return $this->sendResponse($this->validator->invalidSession());
-            }
-
-            if ($userData['role'] !== TaskConfig::ROLE_ADMIN) {
-                Logger::warning('Intento de reabrir tarea sin permisos', [
-                    'user_id' => $userData['id'],
-                    'task_id' => $taskId,
-                    'role' => $userData['role'],
-                    'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-                ]);
-                return $this->sendResponse($this->validator->adminRequired());
-            }
-
-            $taskId = (int)$taskId;
-
-            $task = $this->repository->getTareaById($taskId);
-
-            if (!$task) {
-                return $this->sendResponse($this->validator->taskNotFound());
-            }
-
-            $allowedStatuses = ['completed', 'incomplete'];
-            if (!in_array($task['status'], $allowedStatuses)) {
-                return $this->sendResponse([
-                    'tipo' => 0,
-                    'mensajes' => ['Solo se pueden reabrir tareas completadas o incompletas.'],
-                    'data' => null
-                ]);
-            }
-
-            $data = $this->getDecryptedRequestData();
-
-            if (!$data || empty($data['motivo'])) {
-                return $this->sendResponse([
-                    'tipo' => 0,
-                    'mensajes' => ['El motivo de reapertura es requerido.'],
-                    'data' => null
-                ]);
-            }
-
-            $motivo = trim($data['motivo']);
-            $observaciones = isset($data['observaciones']) ? trim($data['observaciones']) : null;
-
-            $newValues = [];
-            if (isset($data['assigned_user_id'])) {
-                $newValues['assigned_user_id'] = $data['assigned_user_id'];
-            }
-            if (isset($data['deadline']) || isset($data['fechaVencimiento'])) {
-                $newValues['deadline'] = $data['deadline'] ?? $data['fechaVencimiento'];
-            }
-            if (isset($data['priority']) || isset($data['prioridad'])) {
-                $newValues['priority'] = $data['priority'] ?? $this->priorityToInternal($data['prioridad'] ?? 'medium');
-            }
-
-            $result = $this->repository->reopen($taskId, $userData['id'], $motivo, $observaciones, !empty($newValues) ? $newValues : null);
-
-            if ($result) {
-                Logger::info('Tarea reabierta', [
-                    'task_id' => $taskId,
-                    'previous_status' => $task['status'],
-                    'motivo' => $motivo,
-                    'reopened_by' => $userData['username'],
-                    'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-                ]);
-
-                return $this->sendResponse([
-                    'tipo' => 1,
-                    'mensajes' => ['Tarea reabierta exitosamente.'],
-                    'data' => [
-                        'task_id' => $taskId,
-                        'new_status' => 'pending',
-                        'reopened_at' => date('Y-m-d H:i:s')
-                    ]
-                ]);
-            }
-
-            return $this->sendResponse([
-                'tipo' => 0,
-                'mensajes' => ['Error al reabrir la tarea.'],
-                'data' => null
-            ]);
-        } catch (Exception $e) {
-            Logger::error('Error al reabrir tarea', [
                 'task_id' => $taskId ?? 'unknown',
                 'error' => $e->getMessage(),
                 'file' => $e->getFile(),

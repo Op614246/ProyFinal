@@ -1,6 +1,6 @@
 import { Location } from '@angular/common';
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
-import { Subject } from 'rxjs';
+import { Subject, forkJoin } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ActivatedRoute, Router } from '@angular/router';
 import { faFlag, faSliders, faPlus, faPencil, faTrash, faArrowLeft } from '@fortawesome/pro-regular-svg-icons';
@@ -139,12 +139,9 @@ export class TareasInfo implements OnInit {
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
         this.cargarSubtareas();
-        // Forzar detección por si la actualización viene de fuera de Angular
-        try {
-          this.cdr.detectChanges();
-        } catch (e) {
-          // noop
-        }
+        // Forzar detección de cambios explícitamente
+        this.cdr.markForCheck();
+        this.cdr.detectChanges();
       });
   }
 
@@ -175,7 +172,8 @@ export class TareasInfo implements OnInit {
 
           // Recargar subtareas y notificar al resto de componentes
           this.cargarSubtareas();
-          try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+          this.cdr.markForCheck();
+          this.cdr.detectChanges();
           this.tareasService.notificarActualizacion();
           this.mostrarToast('Tarea añadida a tus tareas', 'success');
         } else {
@@ -212,23 +210,54 @@ export class TareasInfo implements OnInit {
         // Usar datos locales inicialmente para carga rápida
         if (tareaLocal) {
           this.tareaAdminSeleccionada = tareaLocal;
+          this.cdr.markForCheck();
         }
         
-        // Siempre recargar desde el servidor para datos actualizados (observaciones, imágenes)
-        this.tareasService.obtenerTareaAdminPorId(tareaId).subscribe({
-          next: (response: any) => {
-            if (response?.tipo === 1 && response.data) {
-              this.tareaAdminSeleccionada = response.data;
-              try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+        // Cargar tarea y subtareas en paralelo desde el servidor
+        forkJoin({
+          tarea: this.tareasService.obtenerTareaPorId(tareaId),
+          subtareas: this.tareasService.obtenerSubtareas(tareaId)
+        }).subscribe({
+          next: (results: any) => {
+            // Actualizar tarea
+            if (results.tarea?.tipo === 1 && results.tarea.data) {
+              this.tareaAdminSeleccionada = results.tarea.data;
+              this.cdr.markForCheck();
+              this.cdr.detectChanges();
+            }
+            
+            // Actualizar subtareas
+            if (results.subtareas?.tipo === 1 && results.subtareas.data) {
+              const nuevasSubtareas = results.subtareas.data.map((s: any) => ({
+                id: s.id,
+                titulo: s.titulo || s.title,
+                descripcion: s.descripcion || s.description || '',
+                estado: s.estado || 'Pendiente',
+                Categoria: s.categoria || s.Categoria || '',
+                Prioridad: this.mapPrioridad(s.prioridad || s.priority),
+                prioridad: this.mapPrioridad(s.prioridad || s.priority),
+                horainicio: s.horainicio || s.hora_inicio || '',
+                horafin: s.horafin || s.hora_fin || '',
+                horaprogramada: s.horaprogramada || '',
+                fechaAsignacion: s.fecha_asignacion || s.fechaAsignacion || '',
+                usuarioasignado: s.usuarioasignado || s.usuario_asignado || '',
+                usuarioasignado_id: s.usuarioasignado_id || s.assigned_user_id || 0,
+                completada: s.completada || s.estado === 'Completada',
+                progreso: s.progreso || 0,
+                estadodetarea: s.estadodetarea || 'Activo',
+                totalSubtareas: 0,
+                subtareasCompletadas: 0
+              }));
+              
+              this.subtareas = [...nuevasSubtareas];
+              this.cdr.markForCheck();
+              this.cdr.detectChanges();
             }
           },
           error: (err: any) => {
-            console.error('Error cargando tarea:', err);
+            console.error('Error cargando tarea y subtareas:', err);
           }
         });
-        
-        // Cargar subtareas del backend
-        this.cargarSubtareas();
       }
     });
   }
@@ -269,8 +298,9 @@ export class TareasInfo implements OnInit {
     if (this.tareaAdminSeleccionada) {
       this.tareasService.completarSubtareaAdmin(this.tareaAdminSeleccionada.id, subtareaId);
       if (this.tareaAdminSeleccionada.Tarea) {
-        this.subtareas = this.tareaAdminSeleccionada.Tarea;
-        try { this.cdr.detectChanges(); } catch(e) { /* noop */ }
+        this.subtareas = [...this.tareaAdminSeleccionada.Tarea];
+        this.cdr.markForCheck();
+        this.cdr.detectChanges();
       }
     }
   }
@@ -279,8 +309,9 @@ export class TareasInfo implements OnInit {
     if (this.tareaAdminSeleccionada) {
       this.tareasService.descompletarSubtareaAdmin(this.tareaAdminSeleccionada.id, subtareaId);
       if (this.tareaAdminSeleccionada.Tarea) {
-        this.subtareas = this.tareaAdminSeleccionada.Tarea;
-        try { this.cdr.detectChanges(); } catch(e) { /* noop */ }
+        this.subtareas = [...this.tareaAdminSeleccionada.Tarea];
+        this.cdr.markForCheck();
+        this.cdr.detectChanges();
       }
     }
   }
@@ -599,12 +630,13 @@ export class TareasInfo implements OnInit {
     const tareaId = this.tareaAdminSeleccionada.id;
     
     // Recargar la tarea actualizada desde el servidor
-    this.tareasService.obtenerTareaAdminPorId(tareaId).subscribe({
+    this.tareasService.obtenerTareaPorId(tareaId).subscribe({
       next: (response: any) => {
         if (response?.tipo === 1 && response.data) {
           this.tareaAdminSeleccionada = response.data;
           this.cargarSubtareas();
-          try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+          this.cdr.markForCheck();
+          this.cdr.detectChanges();
         }
       },
       error: (err: any) => {
@@ -622,7 +654,7 @@ export class TareasInfo implements OnInit {
       next: (response) => {
         console.log('GET /subtareas/task response', response);
         if (response.tipo === 1 && response.data) {
-          this.subtareas = response.data.map((s: any) => ({
+          const nuevasSubtareas = response.data.map((s: any) => ({
             id: s.id,
             titulo: s.titulo || s.title,
             descripcion: s.descripcion || s.description || '',
@@ -643,18 +675,19 @@ export class TareasInfo implements OnInit {
             subtareasCompletadas: 0
           }));
           
+          // Reasignar el array para forzar la detección de cambios
+          this.subtareas = [...nuevasSubtareas];
+          
           // Actualizar contadores en la tarea admin
           if (this.tareaAdminSeleccionada) {
             this.tareaAdminSeleccionada.totalSubtareas = this.subtareas.length;
             this.tareaAdminSeleccionada.subtareasCompletadas = this.subtareas.filter(s => s.completada).length;
           }
 
-          // Forzar detección para asegurar que la vista refleja el cambio
-          try {
-            this.cdr.detectChanges();
-          } catch (e) {
-            // noop
-          }
+          // Forzar detección de cambios explícitamente
+          this.cdr.markForCheck();
+          this.cdr.detectChanges();
+          
           console.log('subtareas assigned:', this.subtareas.length, 'tarea.totalSubtareas', this.tareaAdminSeleccionada?.totalSubtareas);
         }
       },
@@ -752,7 +785,8 @@ export class TareasInfo implements OnInit {
           this.tareaAdminSeleccionada!.estado = 'En progreso';
           this.mostrarToast('Tarea iniciada', 'success');
           this.tareasService.notificarActualizacion();
-          try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+          this.cdr.markForCheck();
+          this.cdr.detectChanges();
         } else {
           this.mostrarToast(response.mensajes?.[0] || 'Error al iniciar tarea', 'danger');
         }
@@ -793,7 +827,8 @@ export class TareasInfo implements OnInit {
                       this.tareaAdminSeleccionada = tareaActualizada.data;
                       this.mostrarToast('Tarea finalizada exitosamente', 'success');
                       this.tareasService.notificarActualizacion();
-                      try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+                      this.cdr.markForCheck();
+                      this.cdr.detectChanges();
                     }
                   },
                   error: (err: any) => {
@@ -804,7 +839,8 @@ export class TareasInfo implements OnInit {
                     this.tareaAdminSeleccionada!.observaciones = datos.observaciones;
                     this.mostrarToast('Tarea finalizada (intenta recargar la página para ver las imágenes)', 'success');
                     this.tareasService.notificarActualizacion();
-                    try { this.cdr.detectChanges(); } catch (e) { /* noop */ }
+                    this.cdr.markForCheck();
+                    this.cdr.detectChanges();
                   }
                 });
               } else {

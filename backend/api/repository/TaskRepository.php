@@ -1,5 +1,4 @@
 <?php
-require_once __DIR__ . '/../core/TaskConfig.php';
 class TaskRepository
 {
     private $db;
@@ -7,15 +6,6 @@ class TaskRepository
     public function __construct()
     {
         $this->db = DB::getInstance()->dbh;
-    }
-
-    private function statusToLegacy(string $status): string
-    {
-        $map = defined('TaskConfig::STATUS_MAP') ? TaskConfig::STATUS_MAP : (defined('STATUS_MAP') ? constant('STATUS_MAP') : null);
-        if (is_array($map)) {
-            return $map[$status] ?? $status;
-        }
-        return $status;
     }
 
     private function statusToInternal(string $status): string
@@ -26,15 +16,6 @@ class TaskRepository
             return $reversed[$status] ?? $status;
         }
         return $status;
-    }
-
-    private function priorityToLegacy(string $priority): string
-    {
-        $map = defined('TaskConfig::PRIORITY_MAP') ? TaskConfig::PRIORITY_MAP : (defined('PRIORITY_MAP') ? constant('PRIORITY_MAP') : null);
-        if (is_array($map)) {
-            return $map[$priority] ?? $priority;
-        }
-        return $priority;
     }
 
     private function priorityToInternal(string $priority): string
@@ -225,16 +206,6 @@ class TaskRepository
         return $tareas;
     }
 
-    public function getAllTareasAdmin(): array { return $this->getTareas(null, []); }
-    
-    public function getTareasConFiltros(array $filtros = []): array { return $this->getTareas(null, $filtros); }
-    
-    public function getTareasAdminPorFecha(string $fecha): array { return $this->getTareas(null, ['fecha' => $fecha]); }
-    
-    public function getTareasAdminConFiltros(array $filtros = []): array { return $this->getTareas(null, $filtros); }
-    
-    public function getAllForUser(int $userId, array $filtros = []): array { return $this->getTareas($userId, $filtros); }
-
     public function getTareaById(int $taskId): ?array
     {
         $sql = "SELECT 
@@ -314,8 +285,6 @@ class TaskRepository
         return $tarea ?: null;
     }
 
-    public function getTareaAdminPorId(int $taskId): ?array { return $this->getTareaById($taskId); }
-
     public function getAvailableTasksForToday(): array
     {
         $sql = "SELECT 
@@ -381,9 +350,22 @@ class TaskRepository
         try {
             $this->db->beginTransaction();
 
+            // Normalizar datos: aceptar ambos formatos (legacy y nuevo)
+            $title = $data['title'] ?? $data['titulo'] ?? '';
+            $description = $data['description'] ?? $data['descripcion'] ?? null;
+            $categoria_id = $this->resolveCategoriaId($data['categoria_id'] ?? $data['Categoria'] ?? null);
+            $status = $data['status'] ?? 'pending';
+            if (isset($data['estado'])) {
+                $status = $this->statusToInternal($data['estado']);
+            }
+            $priority = $data['priority'] ?? 'medium';
+            if (isset($data['prioridad'])) {
+                $priority = $this->priorityToInternal($data['prioridad']);
+            }
+            
             // Validar que deadline no sea antes que fecha_asignacion
-            $fechaAsignacion = $data['fecha_asignacion'] ?? date('Y-m-d');
-            $deadline = $data['deadline'] ?? TaskConfig::getDefaultDeadline($fechaAsignacion);
+            $fechaAsignacion = $data['fecha_asignacion'] ?? $data['fechaAsignacion'] ?? date('Y-m-d');
+            $deadline = $data['deadline'] ?? $data['fechaVencimiento'] ?? TaskConfig::getDefaultDeadline($fechaAsignacion);
             
             if (strtotime($deadline) < strtotime($fechaAsignacion)) {
                 $this->db->rollBack();
@@ -401,6 +383,9 @@ class TaskRepository
                 }
             }
 
+            $assigned_user_id = $data['assigned_user_id'] ?? $data['usuarioasignado_id'] ?? null;
+            $sucursal_id = $this->resolveSucursalId($data['sucursal_id'] ?? $data['sucursal'] ?? null);
+
             $sql = "INSERT INTO tasks (
                         title, description, categoria_id, status, priority,
                         deadline, fecha_asignacion, horainicio, horafin,
@@ -415,18 +400,18 @@ class TaskRepository
 
             $stmt = $this->db->prepare($sql);
             $result = $stmt->execute([
-                ':title' => $data['title'],
-                ':description' => $data['description'] ?? null,
-                ':categoria_id' => $data['categoria_id'] ?? null,
-                ':status' => $data['status'] ?? 'pending',
-                ':priority' => $data['priority'] ?? 'medium',
+                ':title' => $title,
+                ':description' => $description,
+                ':categoria_id' => $categoria_id,
+                ':status' => $status,
+                ':priority' => $priority,
                 ':deadline' => $deadline,
                 ':fecha_asignacion' => $fechaAsignacion,
                 ':horainicio' => $horainicio,
                 ':horafin' => $horafin,
-                ':assigned_user_id' => $data['assigned_user_id'] ?? null,
+                ':assigned_user_id' => $assigned_user_id,
                 ':created_by_user_id' => $createdByUserId,
-                ':sucursal_id' => $data['sucursal_id'] ?? null
+                ':sucursal_id' => $sucursal_id
             ]);
 
             if ($result) {
@@ -452,9 +437,51 @@ class TaskRepository
 
             $oldData = $this->getTareaById($taskId);
             
+            // Normalizar datos: aceptar ambos formatos (legacy y nuevo)
+            $normalizedData = [];
+            
+            // Mapear campos legacy a campos internos
+            if (isset($data['titulo'])) $normalizedData['title'] = $data['titulo'];
+            if (isset($data['title'])) $normalizedData['title'] = $data['title'];
+            
+            if (isset($data['descripcion'])) $normalizedData['description'] = $data['descripcion'];
+            if (isset($data['description'])) $normalizedData['description'] = $data['description'];
+            
+            if (isset($data['fechaAsignacion'])) $normalizedData['fecha_asignacion'] = $data['fechaAsignacion'];
+            if (isset($data['fecha_asignacion'])) $normalizedData['fecha_asignacion'] = $data['fecha_asignacion'];
+            
+            if (isset($data['fechaVencimiento'])) $normalizedData['deadline'] = $data['fechaVencimiento'];
+            if (isset($data['deadline'])) $normalizedData['deadline'] = $data['deadline'];
+            
+            if (isset($data['horainicio'])) $normalizedData['horainicio'] = $data['horainicio'];
+            if (isset($data['horafin'])) $normalizedData['horafin'] = $data['horafin'];
+            
+            if (isset($data['progreso'])) $normalizedData['progreso'] = $data['progreso'];
+            
+            if (isset($data['usuarioasignado_id'])) $normalizedData['assigned_user_id'] = $data['usuarioasignado_id'];
+            if (isset($data['assigned_user_id'])) $normalizedData['assigned_user_id'] = $data['assigned_user_id'];
+            
+            if (isset($data['estado'])) $normalizedData['status'] = $this->statusToInternal($data['estado']);
+            if (isset($data['status'])) $normalizedData['status'] = $data['status'];
+            
+            if (isset($data['prioridad'])) $normalizedData['priority'] = $this->priorityToInternal($data['prioridad']);
+            if (isset($data['priority'])) $normalizedData['priority'] = $data['priority'];
+            
+            if (isset($data['Categoria'])) {
+                $catId = $this->resolveCategoriaId($data['Categoria']);
+                if ($catId) $normalizedData['categoria_id'] = $catId;
+            }
+            if (isset($data['categoria_id'])) $normalizedData['categoria_id'] = $data['categoria_id'];
+            
+            if (isset($data['sucursal'])) {
+                $sucId = $this->resolveSucursalId($data['sucursal']);
+                if ($sucId) $normalizedData['sucursal_id'] = $sucId;
+            }
+            if (isset($data['sucursal_id'])) $normalizedData['sucursal_id'] = $data['sucursal_id'];
+            
             // Validar que deadline no sea antes que fecha_asignacion
-            $fechaAsignacion = $data['fecha_asignacion'] ?? $oldData['fechaAsignacion'] ?? date('Y-m-d');
-            $deadline = $data['deadline'] ?? $oldData['fechaVencimiento'] ?? null;
+            $fechaAsignacion = $normalizedData['fecha_asignacion'] ?? $oldData['fechaAsignacion'] ?? date('Y-m-d');
+            $deadline = $normalizedData['deadline'] ?? $oldData['fechaVencimiento'] ?? null;
             
             if ($deadline && strtotime($deadline) < strtotime($fechaAsignacion)) {
                 $this->db->rollBack();
@@ -462,8 +489,8 @@ class TaskRepository
             }
 
             // Validar que si es el mismo día, horafin >= horainicio
-            $horainicio = $data['horainicio'] ?? $oldData['horainicio'] ?? null;
-            $horafin = $data['horafin'] ?? $oldData['horafin'] ?? null;
+            $horainicio = $normalizedData['horainicio'] ?? $oldData['horainicio'] ?? null;
+            $horafin = $normalizedData['horafin'] ?? $oldData['horafin'] ?? null;
             
             if ($fechaAsignacion === $deadline && $horainicio && $horafin) {
                 if (strtotime($horafin) < strtotime($horainicio)) {
@@ -482,9 +509,9 @@ class TaskRepository
             ];
 
             foreach ($allowedFields as $field) {
-                if (array_key_exists($field, $data)) {
+                if (array_key_exists($field, $normalizedData)) {
                     $fields[] = "$field = :$field";
-                    $params[":$field"] = $data[$field];
+                    $params[":$field"] = $normalizedData[$field];
                 }
             }
 
@@ -500,7 +527,7 @@ class TaskRepository
             $result = $stmt->execute($params);
 
             if ($result) {
-                $this->logHistory($taskId, $userId, 'updated', json_encode($oldData), json_encode($data));
+                $this->logHistory($taskId, $userId, 'updated', json_encode($oldData), json_encode($normalizedData));
             }
 
             $this->db->commit();
@@ -664,31 +691,6 @@ class TaskRepository
         }
 
         return $this->assign($taskId, $userId, $userId);
-    }
-
-    public function complete(int $taskId, int $userId, string $observaciones, ?string $evidencePath = null): bool
-    {
-        $sql = "UPDATE tasks 
-                SET status = 'completed',
-                    progreso = 100,
-                    completed_at = NOW(),
-                    updated_at = NOW()
-                WHERE id = :task_id
-                  AND assigned_user_id = :user_id";
-
-        $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute([
-            ':task_id' => $taskId,
-            ':user_id' => $userId
-        ]);
-
-        if ($result && $stmt->rowCount() > 0) {
-            $this->logHistory($taskId, $userId, 'completed', null, $observaciones);
-            $this->updateUserTaskCount($userId, -1);
-            return true;
-        }
-
-        return false;
     }
 
     public function updateProgress(int $taskId, int $userId, int $progreso): bool
@@ -962,97 +964,6 @@ class TaskRepository
         $stmt->execute();
 
         return $stmt->rowCount();
-    }
-
-    public function crearTareaAdmin(array $data, ?int $userId = null): int
-    {
-            $mapped = [];
-            $mapped['title'] = $data['titulo'] ?? $data['title'] ?? '';
-            $mapped['description'] = $data['descripcion'] ?? $data['description'] ?? null;
-            $mapped['categoria_id'] = $this->resolveCategoriaId($data['Categoria'] ?? $data['categoria_id'] ?? null);
-            $mapped['status'] = $this->statusToInternal($data['estado'] ?? 'Pendiente');
-            $mapped['priority'] = $this->priorityToInternal($data['prioridad'] ?? 'Media');
-            $mapped['fecha_asignacion'] = $data['fechaAsignacion'] ?? $data['fecha_asignacion'] ?? date('Y-m-d');
-            $mapped['horainicio'] = $data['horainicio'] ?? null;
-            $mapped['horafin'] = $data['horafin'] ?? null;
-            $mapped['assigned_user_id'] = $data['usuarioasignado_id'] ?? $data['assigned_user_id'] ?? null;
-            $mapped['sucursal_id'] = $this->resolveSucursalId($data['sucursal'] ?? $data['sucursal_id'] ?? null);
-            $mapped['deadline'] = $data['fechaVencimiento'] ?? $data['deadline'] ?? null; // create() calculará si es null
-
-            $taskId = $this->create($mapped, (int)($userId ?? 0));
-            return (int)$taskId;
-    }
-
-    public function actualizarTareaAdmin(int $taskId, array $data): bool
-    {
-        $updateFields = [];
-        $params = [];
-        
-        $fieldMap = [
-            'titulo' => 'title',
-            'descripcion' => 'description',
-            'fechaAsignacion' => 'fecha_asignacion',
-            'fechaVencimiento' => 'deadline',
-            'horainicio' => 'horainicio',
-            'horafin' => 'horafin',
-            'progreso' => 'progreso',
-            'usuarioasignado_id' => 'assigned_user_id'
-        ];
-        
-        foreach ($fieldMap as $legacyField => $dbField) {
-            if (isset($data[$legacyField])) {
-                $updateFields[] = "$dbField = ?";
-                $params[] = $data[$legacyField];
-            }
-        }
-        
-        if (isset($data['estado'])) {
-            $updateFields[] = "status = ?";
-            $params[] = $this->statusToInternal($data['estado']);
-        }
-        
-        if (isset($data['prioridad'])) {
-            $updateFields[] = "priority = ?";
-            $params[] = $this->priorityToInternal($data['prioridad']);
-        }
-        
-        if (isset($data['Categoria'])) {
-            $catId = $this->resolveCategoriaId($data['Categoria']);
-            if ($catId) {
-                $updateFields[] = "categoria_id = ?";
-                $params[] = $catId;
-            }
-        }
-        
-        if (isset($data['sucursal'])) {
-            $sucId = $this->resolveSucursalId($data['sucursal']);
-            if ($sucId) {
-                $updateFields[] = "sucursal_id = ?";
-                $params[] = $sucId;
-            }
-        }
-        
-        if (empty($updateFields)) {
-            $mapped = [];
-            if (isset($data['titulo'])) $mapped['title'] = $data['titulo'];
-            if (isset($data['descripcion'])) $mapped['description'] = $data['descripcion'];
-            if (isset($data['fechaAsignacion'])) $mapped['fecha_asignacion'] = $data['fechaAsignacion'];
-            if (isset($data['fechaVencimiento'])) $mapped['deadline'] = $data['fechaVencimiento'];
-            if (isset($data['horainicio'])) $mapped['horainicio'] = $data['horainicio'];
-            if (isset($data['horafin'])) $mapped['horafin'] = $data['horafin'];
-            if (isset($data['progreso'])) $mapped['progreso'] = $data['progreso'];
-            if (isset($data['usuarioasignado_id'])) $mapped['assigned_user_id'] = $data['usuarioasignado_id'];
-            if (isset($data['estado'])) $mapped['status'] = $this->statusToInternal($data['estado']);
-            if (isset($data['prioridad'])) $mapped['priority'] = $this->priorityToInternal($data['prioridad']);
-
-            return $this->update($taskId, $mapped, 0);
-        }
-
-        $sql = "UPDATE tasks SET " . implode(', ', $updateFields) . ", updated_at = NOW() WHERE id = ?";
-        $params[] = $taskId;
-        $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute($params);
-        return (bool)$result;
     }
 
     public function iniciarTarea(int $taskId): bool

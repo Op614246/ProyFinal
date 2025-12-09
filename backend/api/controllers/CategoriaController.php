@@ -1,6 +1,4 @@
 <?php
-require_once __DIR__ . '/../core/Logger.php';
-require_once __DIR__ . '/../core/CryptoHelper.php';
 
 class CategoriaController
 {

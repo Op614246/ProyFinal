@@ -5,11 +5,6 @@ $app->add(new JwtMiddleware([]));
 
 $app->add(new SecurityMiddleware(getenv('API_KEY')));
 
-$app->get('/', function () use ($app) {
-    $taskController = new TaskController($app);
-    $taskController->getAll();
-});
-
 $app->get('/statistics', function () use ($app) {
     $taskController = new TaskController($app);
     $taskController->getStatistics();
@@ -30,19 +25,34 @@ $app->post('/', function () use ($app) {
     $taskController->create();
 });
 
-$app->put('/:id/assign', function ($id) use ($app) {
-    $taskController = new TaskController($app);
-    $taskController->assign($id);
+$app->get('/:id', function ($taskId) use ($app) {
+    $controller = new TaskController($app);
+    $controller->getTareaById($taskId);
 });
 
-$app->post('/:id/complete', function ($id) use ($app) {
-    $taskController = new TaskController($app);
-    $taskController->complete($id);
+$app->post('/:id/asignar', function ($taskId) use ($app) {
+    $controller = new TaskController($app);
+    $controller->asignarTarea($taskId);
 });
 
-$app->get('/:id', function ($id) use ($app) {
-    $taskController = new TaskController($app);
-    $taskController->getById($id);
+$app->post('/:id/completar', function ($taskId) use ($app) {
+    $controller = new TaskController($app);
+    $controller->completarTarea($taskId);
+});
+
+$app->put('/:id/iniciar', function ($taskId) use ($app) {
+    $controller = new TaskController($app);
+    $controller->iniciarTarea($taskId);
+});
+
+$app->get('/', function () use ($app) {
+    $controller = new TaskController($app);
+    $controller->getAllTareas();
+});
+
+$app->get('/fecha/:fecha', function ($fecha) use ($app) {
+    $controller = new TaskController($app);
+    $controller->getTareasPorFecha($fecha);
 });
 
 $app->put('/:id/status', function ($id) use ($app) {
@@ -55,9 +65,10 @@ $app->delete('/:id', function ($id) use ($app) {
     $taskController->delete($id);
 });
 
-$app->put('/:id/reopen', function ($id) use ($app) {
-    $taskController = new TaskController($app);
-    $taskController->reopen($id);
+$app->put('/:id/reabrir', function ($taskId) use ($app) {
+    $controller = new TaskController($app);
+    $controller->reabrirTareaAdmin($taskId);
 });
+
 
 $app->run();

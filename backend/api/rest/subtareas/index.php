@@ -15,8 +15,6 @@
  */
 
 require_once __DIR__ . '/../../config.php';
-require_once __DIR__ . '/../../controllers/SubtareaController.php';
-require_once __DIR__ . '/../../repository/SubtareaRepository.php';
 
 // CORS
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
