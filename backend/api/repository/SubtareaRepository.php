@@ -99,29 +99,16 @@ class SubtareaRepository {
         try {
             $this->db->beginTransaction();
 
-            $sql = "
-                INSERT INTO subtareas (
-                    task_id, titulo, descripcion, estado, prioridad,
-                    categoria_id, usuarioasignado_id, progreso, is_deleted
-                ) VALUES (
-                    :task_id, :titulo, :descripcion, :estado, :prioridad,
-                    :categoria_id, :usuarioasignado_id, 0, 0
-                )
-            ";
-
-            $stmt = $this->db->prepare($sql);
-            $stmt->execute([
-                ':task_id' => $data['task_id'],
-                ':titulo' => $data['titulo'],
-                ':descripcion' => $data['descripcion'] ?? null,
-                ':estado' => $data['estado'] ?? 'Pendiente',
-                ':prioridad' => $data['prioridad'] ?? 'Media',
-                ':categoria_id' => $data['categoria_id'] ?? null,
-                ':usuarioasignado_id' => $data['usuarioasignado_id'] ?? null
-            ]);
-
-            $subtareaId = $this->db->lastInsertId();
-            $this->actualizarProgresoTarea($data['task_id']);
+            // Crear entity desde datos del array
+            $subtarea = new Subtarea($data);
+            
+            // Usar createFromEntity para insertar
+            $subtareaId = $this->createFromEntity($subtarea);
+            
+            // Actualizar progreso de la tarea
+            if (isset($data['task_id'])) {
+                $this->actualizarProgresoTarea($data['task_id']);
+            }
             
             $this->db->commit();
             return $subtareaId;
@@ -380,9 +367,9 @@ class SubtareaRepository {
     }
 
     /**
-     * Crea una subtarea a partir de una entity
+     * Crea una subtarea a partir de una entity (interno)
      */
-    public function createFromEntity(Subtarea $subtarea): int
+    private function createFromEntity(Subtarea $subtarea): int
     {
         $sql = "INSERT INTO subtareas (task_id, titulo, descripcion, status, orden, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
@@ -397,30 +384,5 @@ class SubtareaRepository {
         ]);
         
         return (int)$this->db->lastInsertId();
-    }
-
-    /**
-     * Actualiza una subtarea a partir de una entity
-     */
-    public function updateFromEntity(int $id, Subtarea $subtarea): bool
-    {
-        $sql = "UPDATE subtareas SET 
-                titulo = ?, 
-                descripcion = ?, 
-                status = ?, 
-                orden = ?,
-                assigned_user_id = ?,
-                updated_at = NOW()
-                WHERE id = ? AND is_deleted = 0";
-        
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute([
-            $subtarea->getTitulo(),
-            $subtarea->getDescripcion(),
-            $subtarea->getStatus(),
-            $subtarea->getOrden(),
-            $subtarea->getAssignedUserId(),
-            $id
-        ]);
     }
 }

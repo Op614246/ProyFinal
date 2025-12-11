@@ -128,31 +128,6 @@ class CategoriaRepository
         return $entities;
     }
 
-    /**
-     * Crea una categoría a partir de una entity
-     */
-    public function createFromEntity(Categoria $categoria)
-    {
-        return $this->create([
-            'nombre' => $categoria->getNombre(),
-            'descripcion' => $categoria->getDescripcion(),
-            'color' => $categoria->getColor()
-        ]);
-    }
-
-    /**
-     * Actualiza una categoría a partir de una entity
-     */
-    public function updateFromEntity(int $id, Categoria $categoria): bool
-    {
-        return $this->update($id, [
-            'nombre' => $categoria->getNombre(),
-            'descripcion' => $categoria->getDescripcion(),
-            'color' => $categoria->getColor(),
-            'activo' => $categoria->getActivo()
-        ]);
-    }
-
     public function existsByName(string $nombre, ?int $excludeId = null): bool
     {
         $sql = "SELECT COUNT(*) FROM categorias WHERE nombre = :nombre AND activo = 1";

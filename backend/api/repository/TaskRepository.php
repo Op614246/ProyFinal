@@ -66,6 +66,51 @@ class TaskRepository
         return $priority;
     }
 
+    /**
+     * Normaliza datos de array a formato task para crear entity
+     */
+    private function normalizeTaskData(array $data): array
+    {
+        $normalized = [];
+        
+        // Title
+        $normalized['title'] = $data['title'] ?? $data['titulo'] ?? '';
+        
+        // Description
+        $normalized['description'] = $data['description'] ?? $data['descripcion'] ?? null;
+        
+        // Categoría
+        $normalized['categoria_id'] = $this->resolveCategoriaId($data['categoria_id'] ?? $data['Categoria'] ?? null);
+        
+        // Status
+        $normalized['status'] = $data['status'] ?? 'pending';
+        if (isset($data['estado'])) {
+            $normalized['status'] = $this->statusToInternal($data['estado']);
+        }
+        
+        // Priority
+        $normalized['priority'] = $data['priority'] ?? 'medium';
+        if (isset($data['prioridad'])) {
+            $normalized['priority'] = $this->priorityToInternal($data['prioridad']);
+        }
+        
+        // Fechas
+        $normalized['fecha_asignacion'] = $data['fecha_asignacion'] ?? $data['fechaAsignacion'] ?? date('Y-m-d');
+        $normalized['deadline'] = $data['deadline'] ?? $data['fechaVencimiento'] ?? TaskConfig::getDefaultDeadline($normalized['fecha_asignacion']);
+        
+        // Horarios
+        $normalized['horainicio'] = $data['horainicio'] ?? null;
+        $normalized['horafin'] = $data['horafin'] ?? null;
+        
+        // Usuario asignado
+        $normalized['assigned_user_id'] = $data['assigned_user_id'] ?? $data['usuarioasignado_id'] ?? null;
+        
+        // Sucursal
+        $normalized['sucursal_id'] = $this->resolveSucursalId($data['sucursal_id'] ?? $data['sucursal'] ?? null);
+        
+        return $normalized;
+    }
+
     private function getSubtaskStats(int $taskId): array
     {
         $sql = "SELECT 
@@ -399,79 +444,35 @@ class TaskRepository
         try {
             $this->db->beginTransaction();
 
-            $title = $data['title'] ?? $data['titulo'] ?? '';
-            $description = $data['description'] ?? $data['descripcion'] ?? null;
-            $categoria_id = $this->resolveCategoriaId($data['categoria_id'] ?? $data['Categoria'] ?? null);
-            $status = $data['status'] ?? 'pending';
-            if (isset($data['estado'])) {
-                $status = $this->statusToInternal($data['estado']);
-            }
-            $priority = $data['priority'] ?? 'medium';
-            if (isset($data['prioridad'])) {
-                $priority = $this->priorityToInternal($data['prioridad']);
-            }
+            // Normalizar datos
+            $normalized = $this->normalizeTaskData($data);
             
-            // Validar que deadline no sea antes que fecha_asignacion
-            $fechaAsignacion = $data['fecha_asignacion'] ?? $data['fechaAsignacion'] ?? date('Y-m-d');
-            $deadline = $data['deadline'] ?? $data['fechaVencimiento'] ?? TaskConfig::getDefaultDeadline($fechaAsignacion);
-            
-            if (strtotime($deadline) < strtotime($fechaAsignacion)) {
+            // Validaciones
+            if (strtotime($normalized['deadline']) < strtotime($normalized['fecha_asignacion'])) {
                 $this->db->rollBack();
                 throw new InvalidArgumentException('La fecha de vencimiento no puede ser anterior a la fecha de asignación');
             }
 
             // Validar que si es el mismo día, horafin >= horainicio
-            $horainicio = $data['horainicio'] ?? null;
-            $horafin = $data['horafin'] ?? null;
-            
-            if ($fechaAsignacion === $deadline && $horainicio && $horafin) {
-                if (strtotime($horafin) < strtotime($horainicio)) {
+            if ($normalized['fecha_asignacion'] === $normalized['deadline'] && $normalized['horainicio'] && $normalized['horafin']) {
+                if (strtotime($normalized['horafin']) < strtotime($normalized['horainicio'])) {
                     $this->db->rollBack();
                     throw new InvalidArgumentException('La hora de fin no puede ser anterior a la hora de inicio');
                 }
             }
 
-            $assigned_user_id = $data['assigned_user_id'] ?? $data['usuarioasignado_id'] ?? null;
-            $sucursal_id = $this->resolveSucursalId($data['sucursal_id'] ?? $data['sucursal'] ?? null);
-
-            $sql = "INSERT INTO tasks (
-                        title, description, categoria_id, status, priority,
-                        deadline, fecha_asignacion, horainicio, horafin,
-                        assigned_user_id, created_by_user_id, sucursal_id,
-                        is_deleted, created_at, updated_at
-                    ) VALUES (
-                        :title, :description, :categoria_id, :status, :priority,
-                        :deadline, :fecha_asignacion, :horainicio, :horafin,
-                        :assigned_user_id, :created_by_user_id, :sucursal_id,
-                        0, NOW(), NOW()
-                    )";
-
-            $stmt = $this->db->prepare($sql);
-            $result = $stmt->execute([
-                ':title' => $title,
-                ':description' => $description,
-                ':categoria_id' => $categoria_id,
-                ':status' => $status,
-                ':priority' => $priority,
-                ':deadline' => $deadline,
-                ':fecha_asignacion' => $fechaAsignacion,
-                ':horainicio' => $horainicio,
-                ':horafin' => $horafin,
-                ':assigned_user_id' => $assigned_user_id,
-                ':created_by_user_id' => $createdByUserId,
-                ':sucursal_id' => $sucursal_id
-            ]);
-
-            if ($result) {
-                $taskId = (int)$this->db->lastInsertId();
-                $this->logHistory($taskId, $createdByUserId, 'created', null, json_encode($data));
-                
-                $this->db->commit();
-                return $taskId;
-            }
-
-            $this->db->rollBack();
-            return false;
+            // Crear entity
+            $normalized['created_by_user_id'] = $createdByUserId;
+            $task = $this->arrayToEntity($normalized);
+            
+            // Usar createFromEntity para la inserción
+            $taskId = $this->createFromEntity($task);
+            
+            // Log history
+            $this->logHistory($taskId, $createdByUserId, 'created', null, json_encode($data));
+            
+            $this->db->commit();
+            return $taskId;
         } catch (Exception $e) {
             $this->db->rollBack();
             throw $e;
@@ -1170,9 +1171,9 @@ class TaskRepository
     }
 
     /**
-     * Crea una tarea a partir de una entity
+     * Crea una tarea a partir de una entity (interno)
      */
-    public function createFromEntity(Task $task): int
+    private function createFromEntity(Task $task): int
     {
         $sql = "INSERT INTO tasks (
                     title, description, priority, status, deadline,
@@ -1201,9 +1202,9 @@ class TaskRepository
     }
 
     /**
-     * Actualiza una tarea a partir de una entity
+     * Actualiza una tarea a partir de una entity (interno)
      */
-    public function updateFromEntity(int $id, Task $task): bool
+    private function updateFromEntity(int $id, Task $task): bool
     {
         $sql = "UPDATE tasks SET 
                     title = ?,

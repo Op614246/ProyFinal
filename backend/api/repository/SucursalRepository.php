@@ -126,29 +126,6 @@ class SucursalRepository
         return $entities;
     }
 
-    /**
-     * Crea una sucursal a partir de una entity
-     */
-    public function createFromEntity(Sucursal $sucursal)
-    {
-        return $this->create([
-            'nombre' => $sucursal->getNombre(),
-            'direccion' => $sucursal->getDireccion()
-        ]);
-    }
-
-    /**
-     * Actualiza una sucursal a partir de una entity
-     */
-    public function updateFromEntity(int $id, Sucursal $sucursal): bool
-    {
-        return $this->update($id, [
-            'nombre' => $sucursal->getNombre(),
-            'direccion' => $sucursal->getDireccion(),
-            'activo' => $sucursal->getActivo()
-        ]);
-    }
-
     public function existsByName(string $nombre, ?int $excludeId = null): bool
     {
         $sql = "SELECT COUNT(*) FROM sucursales WHERE nombre = :nombre AND activo = 1";

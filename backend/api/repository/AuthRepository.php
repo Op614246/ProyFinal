@@ -320,16 +320,4 @@ class AuthRepository {
         }
         return $this->arrayToEntity($data);
     }
-
-    /**
-     * Crea un usuario a partir de una entity
-     */
-    public function crearUsuarioFromEntity(User $user)
-    {
-        return $this->crearUsuario(
-            $user->getUsername(),
-            $user->getPasswordHash(),
-            $user->getRole()
-        );
-    }
 }
