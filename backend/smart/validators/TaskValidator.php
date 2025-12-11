@@ -3,9 +3,6 @@ class TaskValidator
 {
     private $errors = [];
 
-    const MAX_IMAGE_SIZE = 1572864; // 1.5 MB en bytes
-    const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png'];
-
     public function validateCreate(array $data): bool
     {
         $this->errors = [];
@@ -39,6 +36,13 @@ class TaskValidator
             $deadline = is_string($data['deadline']) ? trim($data['deadline']) : '';
             if (!$this->isValidDate($deadline)) {
                 $this->errors[] = "El formato de fecha límite es inválido. Use YYYY-MM-DD.";
+            } else {
+                // Validar que el deadline sea mayor que la fecha de asignación
+                $fechaAsignacion = $data['fecha_asignacion'] ?? date('Y-m-d');
+                $errorMsg = null;
+                if (!self::validateDeadlineAfterOrEqual($fechaAsignacion, $deadline, $errorMsg)) {
+                    $this->errors[] = $errorMsg;
+                }
             }
         }
 
@@ -58,6 +62,14 @@ class TaskValidator
         if (isset($data['user_id']) && !empty($data['user_id'])) {
             if (!is_numeric($data['user_id'])) {
                 $this->errors[] = "El ID de usuario debe ser numérico.";
+            }
+        }
+
+        // Validar que el deadline sea mayor que la fecha de asignación si ambos están presentes
+        if (isset($data['deadline']) && !empty($data['deadline']) && isset($data['fecha_asignacion']) && !empty($data['fecha_asignacion'])) {
+            $errorMsg = null;
+            if (!self::validateDeadlineAfterOrEqual($data['fecha_asignacion'], $data['deadline'], $errorMsg)) {
+                $this->errors[] = $errorMsg;
             }
         }
 
@@ -85,8 +97,8 @@ class TaskValidator
         }
 
         $fileSize = filesize($file['tmp_name']);
-        if ($fileSize === false || $fileSize > self::MAX_IMAGE_SIZE) {
-            $sizeMB = number_format(self::MAX_IMAGE_SIZE / 1048576, 1);
+        if ($fileSize === false || $fileSize > TaskConfig::MAX_FILE_SIZE_BYTES) {
+            $sizeMB = number_format(TaskConfig::MAX_FILE_SIZE_BYTES / 1048576, 1);
             $this->errors[] = "La imagen no puede exceder {$sizeMB} MB.";
         }
 
@@ -94,7 +106,7 @@ class TaskValidator
         $mimeType = finfo_file($finfo, $file['tmp_name']);
         finfo_close($finfo);
 
-        if (!$mimeType || !in_array($mimeType, self::ALLOWED_MIME_TYPES, true)) {
+        if (!$mimeType || !in_array($mimeType, TaskConfig::ALLOWED_MIME_TYPES, true)) {
             $this->errors[] = "Solo se permiten imágenes JPEG o PNG.";
         }
 

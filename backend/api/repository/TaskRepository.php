@@ -361,7 +361,6 @@ class TaskRepository
         try {
             $this->db->beginTransaction();
 
-            // Normalizar datos: aceptar ambos formatos (legacy y nuevo)
             $title = $data['title'] ?? $data['titulo'] ?? '';
             $description = $data['description'] ?? $data['descripcion'] ?? null;
             $categoria_id = $this->resolveCategoriaId($data['categoria_id'] ?? $data['Categoria'] ?? null);
@@ -448,10 +447,8 @@ class TaskRepository
 
             $oldData = $this->getTareaById($taskId);
             
-            // Normalizar datos: aceptar ambos formatos (legacy y nuevo)
             $normalizedData = [];
             
-            // Mapear campos legacy a campos internos
             if (isset($data['titulo'])) $normalizedData['title'] = $data['titulo'];
             if (isset($data['title'])) $normalizedData['title'] = $data['title'];
             

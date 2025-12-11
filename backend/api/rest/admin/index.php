@@ -9,11 +9,6 @@ require_once __DIR__ . '/../../config.php';
 $app->add(new JwtMiddleware());
 $app->add(new SecurityMiddleware(getenv('API_KEY')));
 
-$app->post('/', function () use ($app) {
-    $controller = new TaskController($app);
-    $controller->create();
-});
-
 $app->put('/:id', function ($taskId) use ($app) {
     $controller = new TaskController($app);
     $controller->updateStatus($taskId);
