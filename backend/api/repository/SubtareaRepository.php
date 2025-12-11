@@ -5,6 +5,33 @@ class SubtareaRepository {
     public function __construct() {
         $this->db = DB::getInstance()->dbh;
     }
+
+    /**
+     * Convierte un array de datos en una entity Subtarea
+     */
+    private function arrayToEntity(array $data): Subtarea
+    {
+        return new Subtarea($data);
+    }
+
+    /**
+     * Convierte una entity Subtarea a array para respuestas API
+     */
+    private function entityToArray(Subtarea $subtarea): array
+    {
+        return [
+            'id' => $subtarea->getId(),
+            'task_id' => $subtarea->getTaskId(),
+            'titulo' => $subtarea->getTitulo(),
+            'descripcion' => $subtarea->getDescripcion(),
+            'status' => $subtarea->getStatus(),
+            'orden' => $subtarea->getOrden(),
+            'assigned_user_id' => $subtarea->getAssignedUserId(),
+            'completed_at' => $subtarea->getCompletedAt(),
+            'created_at' => $subtarea->getCreatedAt(),
+            'updated_at' => $subtarea->getUpdatedAt()
+        ];
+    }
     
     public function getSubtareasByTaskId($taskId) {
         $sql = "
@@ -300,5 +327,100 @@ class SubtareaRepository {
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Obtiene una subtarea como entity
+     */
+    public function getSubtareaByIdAsEntity($subtareaId): ?Subtarea
+    {
+        $sql = "
+            SELECT 
+                s.id, s.task_id, s.titulo, s.descripcion, s.status,
+                s.orden, s.assigned_user_id, s.completed_at,
+                s.created_at, s.updated_at
+            FROM subtareas s
+            WHERE s.id = ? AND s.is_deleted = 0
+        ";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$subtareaId]);
+        $data = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$data) {
+            return null;
+        }
+        return $this->arrayToEntity($data);
+    }
+
+    /**
+     * Obtiene todas las subtareas de una tarea como entities
+     */
+    public function getSubtareasByTaskIdAsEntities($taskId): array
+    {
+        $sql = "
+            SELECT 
+                s.id, s.task_id, s.titulo, s.descripcion, s.status,
+                s.orden, s.assigned_user_id, s.completed_at,
+                s.created_at, s.updated_at
+            FROM subtareas s
+            WHERE s.task_id = ? AND s.is_deleted = 0
+            ORDER BY s.orden ASC
+        ";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$taskId]);
+        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        $entities = [];
+        foreach ($data as $item) {
+            $entities[] = $this->arrayToEntity($item);
+        }
+        return $entities;
+    }
+
+    /**
+     * Crea una subtarea a partir de una entity
+     */
+    public function createFromEntity(Subtarea $subtarea): int
+    {
+        $sql = "INSERT INTO subtareas (task_id, titulo, descripcion, status, orden, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            $subtarea->getTaskId(),
+            $subtarea->getTitulo(),
+            $subtarea->getDescripcion(),
+            $subtarea->getStatus(),
+            $subtarea->getOrden()
+        ]);
+        
+        return (int)$this->db->lastInsertId();
+    }
+
+    /**
+     * Actualiza una subtarea a partir de una entity
+     */
+    public function updateFromEntity(int $id, Subtarea $subtarea): bool
+    {
+        $sql = "UPDATE subtareas SET 
+                titulo = ?, 
+                descripcion = ?, 
+                status = ?, 
+                orden = ?,
+                assigned_user_id = ?,
+                updated_at = NOW()
+                WHERE id = ? AND is_deleted = 0";
+        
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute([
+            $subtarea->getTitulo(),
+            $subtarea->getDescripcion(),
+            $subtarea->getStatus(),
+            $subtarea->getOrden(),
+            $subtarea->getAssignedUserId(),
+            $id
+        ]);
     }
 }

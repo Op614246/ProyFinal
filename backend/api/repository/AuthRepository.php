@@ -10,6 +10,38 @@ class AuthRepository {
         $this->crypto = CryptoHelper::getInstance();
     }
 
+    /**
+     * Convierte un array de datos en una entity User
+     */
+    private function arrayToEntity(array $data): User
+    {
+        return new User($data);
+    }
+
+    /**
+     * Convierte una entity User a array para respuestas API
+     */
+    private function entityToArray(User $user): array
+    {
+        return [
+            'id' => $user->getId(),
+            'username' => $user->getUsername(),
+            'role' => $user->getRole(),
+            'nombre' => $user->getNombre(),
+            'apellido' => $user->getApellido(),
+            'email' => $user->getEmail(),
+            'departamento' => $user->getDepartamento(),
+            'estado' => $user->getEstado(),
+            'tareas_activas' => $user->getTareasActivas(),
+            'turno' => $user->getTurno(),
+            'is_active' => $user->isActive(),
+            'failed_attempts' => $user->getFailedAttempts(),
+            'last_attempt_time' => $user->getLastAttemptTime(),
+            'lockout_until' => $user->getLockoutUntil(),
+            'is_permanently_locked' => $user->isPermanentlyLocked()
+        ];
+    }
+
     private function encryptUsername($username) {
         return $this->crypto->encryptDeterministic(trim($username));
     }
@@ -275,5 +307,29 @@ class AuthRepository {
         $stmt->execute();
         
         return $stmt->rowCount();
+    }
+
+    /**
+     * Obtiene un usuario por username como entity
+     */
+    public function obtenerUsuarioPorUsernameAsEntity($username): ?User
+    {
+        $data = $this->obtenerUsuarioPorUsername($username);
+        if (!$data) {
+            return null;
+        }
+        return $this->arrayToEntity($data);
+    }
+
+    /**
+     * Crea un usuario a partir de una entity
+     */
+    public function crearUsuarioFromEntity(User $user)
+    {
+        return $this->crearUsuario(
+            $user->getUsername(),
+            $user->getPasswordHash(),
+            $user->getRole()
+        );
     }
 }

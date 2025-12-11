@@ -8,6 +8,28 @@ class SucursalRepository
         $this->db = DB::getInstance()->dbh;
     }
 
+    /**
+     * Convierte un array de datos en una entity Sucursal
+     */
+    private function arrayToEntity(array $data): Sucursal
+    {
+        return new Sucursal($data);
+    }
+
+    /**
+     * Convierte una entity Sucursal a array para respuestas API
+     */
+    private function entityToArray(Sucursal $sucursal): array
+    {
+        return [
+            'id' => $sucursal->getId(),
+            'nombre' => $sucursal->getNombre(),
+            'direccion' => $sucursal->getDireccion(),
+            'activo' => $sucursal->getActivo(),
+            'created_at' => $sucursal->getCreatedAt()
+        ];
+    }
+
     public function getAll(): array
     {
         $sql = "SELECT id, nombre, direccion, created_at 
@@ -77,6 +99,54 @@ class SucursalRepository
         $sql = "UPDATE sucursales SET activo = 0 WHERE id = :id";
         $stmt = $this->db->prepare($sql);
         return $stmt->execute([':id' => $id]);
+    }
+
+    /**
+     * Obtiene una sucursal como entity
+     */
+    public function getByIdAsEntity(int $id): ?Sucursal
+    {
+        $data = $this->getById($id);
+        if (!$data) {
+            return null;
+        }
+        return $this->arrayToEntity($data);
+    }
+
+    /**
+     * Obtiene todas las sucursales como entities
+     */
+    public function getAllAsEntities(): array
+    {
+        $data = $this->getAll();
+        $entities = [];
+        foreach ($data as $item) {
+            $entities[] = $this->arrayToEntity($item);
+        }
+        return $entities;
+    }
+
+    /**
+     * Crea una sucursal a partir de una entity
+     */
+    public function createFromEntity(Sucursal $sucursal)
+    {
+        return $this->create([
+            'nombre' => $sucursal->getNombre(),
+            'direccion' => $sucursal->getDireccion()
+        ]);
+    }
+
+    /**
+     * Actualiza una sucursal a partir de una entity
+     */
+    public function updateFromEntity(int $id, Sucursal $sucursal): bool
+    {
+        return $this->update($id, [
+            'nombre' => $sucursal->getNombre(),
+            'direccion' => $sucursal->getDireccion(),
+            'activo' => $sucursal->getActivo()
+        ]);
     }
 
     public function existsByName(string $nombre, ?int $excludeId = null): bool

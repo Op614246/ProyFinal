@@ -8,6 +8,44 @@ class TaskRepository
         $this->db = DB::getInstance()->dbh;
     }
 
+    /**
+     * Convierte un array de datos en una entity Task
+     */
+    private function arrayToEntity(array $data): Task
+    {
+        return new Task($data);
+    }
+
+    /**
+     * Convierte una entity Task a array para respuestas API
+     */
+    private function entityToArray(Task $task): array
+    {
+        return [
+            'id' => $task->getId(),
+            'title' => $task->getTitle(),
+            'description' => $task->getDescription(),
+            'priority' => $task->getPriority(),
+            'status' => $task->getStatus(),
+            'deadline' => $task->getDeadline(),
+            'assigned_user_id' => $task->getAssignedUserId(),
+            'categoria_id' => $task->getCategoryId(),
+            'sucursal_id' => $task->getSucursalId(),
+            'created_by_user_id' => $task->getCreatedBy(),
+            'created_at' => $task->getCreatedAt(),
+            'updated_at' => $task->getUpdatedAt(),
+            'completed_at' => $task->getCompletedAt(),
+            'observaciones' => $task->getObservaciones(),
+            'fecha_asignacion' => $task->getFechaAsignacion(),
+            'horainicio' => $task->getHoraInicio(),
+            'horafin' => $task->getHoraFin(),
+            'progreso' => $task->getProgreso(),
+            'reopened_at' => $task->getReopenedAt(),
+            'reabierta_por' => $task->getReabiertaPor(),
+            'is_deleted' => $task->getIsDeleted()
+        ];
+    }
+
     private function statusToInternal(string $status): string
     {
         $map = defined('TaskConfig::STATUS_MAP') ? TaskConfig::STATUS_MAP : (defined('STATUS_MAP') ? constant('STATUS_MAP') : null);
@@ -1105,5 +1143,101 @@ class TaskRepository
                 )";
         $stmt = $this->db->prepare($sql);
         return $stmt->execute();
+    }
+
+    /**
+     * Obtiene una tarea por ID como entity
+     */
+    public function getTaskByIdAsEntity(int $id): ?Task
+    {
+        $sql = "SELECT 
+                    id, title, description, priority, status, deadline,
+                    assigned_user_id, categoria_id, sucursal_id, created_by_user_id,
+                    created_at, updated_at, completed_at, observaciones,
+                    fecha_asignacion, horainicio, horafin, progreso, is_deleted
+                FROM tasks
+                WHERE id = ? AND is_deleted = 0
+                LIMIT 1";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$id]);
+        $data = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$data) {
+            return null;
+        }
+        return $this->arrayToEntity($data);
+    }
+
+    /**
+     * Crea una tarea a partir de una entity
+     */
+    public function createFromEntity(Task $task): int
+    {
+        $sql = "INSERT INTO tasks (
+                    title, description, priority, status, deadline,
+                    assigned_user_id, categoria_id, sucursal_id, created_by_user_id,
+                    fecha_asignacion, horainicio, horafin, progreso, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            $task->getTitle(),
+            $task->getDescription(),
+            $task->getPriority(),
+            $task->getStatus(),
+            $task->getDeadline(),
+            $task->getAssignedUserId(),
+            $task->getCategoryId(),
+            $task->getSucursalId(),
+            $task->getCreatedBy(),
+            $task->getFechaAsignacion(),
+            $task->getHoraInicio(),
+            $task->getHoraFin(),
+            $task->getProgreso()
+        ]);
+        
+        return (int)$this->db->lastInsertId();
+    }
+
+    /**
+     * Actualiza una tarea a partir de una entity
+     */
+    public function updateFromEntity(int $id, Task $task): bool
+    {
+        $sql = "UPDATE tasks SET 
+                    title = ?,
+                    description = ?,
+                    priority = ?,
+                    status = ?,
+                    deadline = ?,
+                    assigned_user_id = ?,
+                    categoria_id = ?,
+                    sucursal_id = ?,
+                    fecha_asignacion = ?,
+                    horainicio = ?,
+                    horafin = ?,
+                    progreso = ?,
+                    observaciones = ?,
+                    updated_at = NOW()
+                WHERE id = ? AND is_deleted = 0";
+        
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute([
+            $task->getTitle(),
+            $task->getDescription(),
+            $task->getPriority(),
+            $task->getStatus(),
+            $task->getDeadline(),
+            $task->getAssignedUserId(),
+            $task->getCategoryId(),
+            $task->getSucursalId(),
+            $task->getFechaAsignacion(),
+            $task->getHoraInicio(),
+            $task->getHoraFin(),
+            $task->getProgreso(),
+            $task->getObservaciones(),
+            $id
+        ]);
     }
 }

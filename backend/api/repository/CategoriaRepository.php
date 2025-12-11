@@ -8,6 +8,29 @@ class CategoriaRepository
         $this->db = DB::getInstance()->dbh;
     }
 
+    /**
+     * Convierte un array de datos en una entity Categoria
+     */
+    private function arrayToEntity(array $data): Categoria
+    {
+        return new Categoria($data);
+    }
+
+    /**
+     * Convierte una entity Categoria a array para respuestas API
+     */
+    private function entityToArray(Categoria $categoria): array
+    {
+        return [
+            'id' => $categoria->getId(),
+            'nombre' => $categoria->getNombre(),
+            'descripcion' => $categoria->getDescripcion(),
+            'color' => $categoria->getColor(),
+            'activo' => $categoria->getActivo(),
+            'created_at' => $categoria->getCreatedAt()
+        ];
+    }
+
     public function getAll(): array
     {
         $sql = "SELECT id, nombre, descripcion, color, created_at 
@@ -78,6 +101,56 @@ class CategoriaRepository
         $sql = "UPDATE categorias SET activo = 0 WHERE id = :id";
         $stmt = $this->db->prepare($sql);
         return $stmt->execute([':id' => $id]);
+    }
+
+    /**
+     * Obtiene una categoría como entity
+     */
+    public function getByIdAsEntity(int $id): ?Categoria
+    {
+        $data = $this->getById($id);
+        if (!$data) {
+            return null;
+        }
+        return $this->arrayToEntity($data);
+    }
+
+    /**
+     * Obtiene todas las categorías como entities
+     */
+    public function getAllAsEntities(): array
+    {
+        $data = $this->getAll();
+        $entities = [];
+        foreach ($data as $item) {
+            $entities[] = $this->arrayToEntity($item);
+        }
+        return $entities;
+    }
+
+    /**
+     * Crea una categoría a partir de una entity
+     */
+    public function createFromEntity(Categoria $categoria)
+    {
+        return $this->create([
+            'nombre' => $categoria->getNombre(),
+            'descripcion' => $categoria->getDescripcion(),
+            'color' => $categoria->getColor()
+        ]);
+    }
+
+    /**
+     * Actualiza una categoría a partir de una entity
+     */
+    public function updateFromEntity(int $id, Categoria $categoria): bool
+    {
+        return $this->update($id, [
+            'nombre' => $categoria->getNombre(),
+            'descripcion' => $categoria->getDescripcion(),
+            'color' => $categoria->getColor(),
+            'activo' => $categoria->getActivo()
+        ]);
     }
 
     public function existsByName(string $nombre, ?int $excludeId = null): bool
